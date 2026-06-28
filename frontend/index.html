@@ -5,8 +5,6 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>G4 Studio — Roblox games at the speed of thought</title>
   <link rel="stylesheet" href="/static/style.css" />
-  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
 </head>
 <body>
   <header class="topbar">
@@ -30,19 +28,27 @@
 
   <main class="stage">
     <div class="viewport">
-      <div id="canvas-wrap"></div>
       <div class="hud">
         <div class="hud-item"><span class="hud-val" id="hud-time">0</span><span class="hud-unit">ms</span><span class="hud-lbl">build time</span></div>
         <div class="hud-item"><span class="hud-val" id="hud-tps">0</span><span class="hud-unit">tok/s</span><span class="hud-lbl">throughput</span></div>
         <div class="hud-item"><span class="hud-val" id="hud-parts">0</span><span class="hud-unit">parts</span><span class="hud-lbl">built</span></div>
         <div class="hud-item"><span class="hud-val" id="hud-agents">0</span><span class="hud-unit">agents</span><span class="hud-lbl">swarm</span></div>
       </div>
+
+      <div class="stages-wrap">
+        <div id="stages" class="stages-grid"></div>
+        <div id="placeholder" class="placeholder">
+          Type a prompt and hit <b>Build ⚡</b> — a Gemma-4 swarm on Cerebras designs and
+          builds a complete, playable Roblox obby in seconds.
+        </div>
+      </div>
+
       <div class="result-card hidden" id="result">
         <div class="result-title" id="result-title">—</div>
         <div class="result-sub" id="result-sub"></div>
         <div class="result-actions">
           <a id="dl-rbxmx" class="btn-dl" download="g4obby.rbxmx">⬇ Download .rbxmx</a>
-          <span class="hint">Studio → right-click Workspace → Insert From File → Play</span>
+          <span class="hint">Studio → right-click Workspace → Insert From File → Play &nbsp;·&nbsp; or build it live with the G4 plugin</span>
         </div>
       </div>
     </div>
