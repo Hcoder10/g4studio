@@ -6,7 +6,7 @@ Genesis smoke test — validates everything the swarm depends on, in one run:
 
 Usage (PowerShell):
     $env:CEREBRAS_API_KEY = "csk-..."
-    python C:\Users\sarta\g4studio\smoke_test.py
+    python smoke_test.py   (run from the g4studio folder)
 
 Only dependency: requests  (pip install requests). PIL is optional (better vision test).
 """
@@ -58,7 +58,7 @@ if not API_KEY:
         "C:\\Users\\sarta\\roblox-studio-mcp\\packages\\agent-harness\\.env "
         "(gitignored), or set $env:CEREBRAS_API_KEY for this shell."
     )
-print(f"(CEREBRAS_API_KEY loaded, length {len(API_KEY)} — not displayed)")
+print(f"(CEREBRAS_API_KEY loaded, length {len(API_KEY)} - not displayed)")
 
 HEADERS = {"Authorization": f"Bearer {API_KEY}", "Content-Type": "application/json"}
 
@@ -114,16 +114,24 @@ tools = [
                     "name": {"type": "string"},
                     "shape": {"type": "string", "enum": ["Block", "Ball", "Cylinder", "Wedge"]},
                     "position": {
-                        "type": "array",
-                        "items": {"type": "number"},
-                        "minItems": 3,
-                        "maxItems": 3,
+                        "type": "object",
+                        "additionalProperties": False,
+                        "properties": {
+                            "x": {"type": "number"},
+                            "y": {"type": "number"},
+                            "z": {"type": "number"},
+                        },
+                        "required": ["x", "y", "z"],
                     },
                     "size": {
-                        "type": "array",
-                        "items": {"type": "number"},
-                        "minItems": 3,
-                        "maxItems": 3,
+                        "type": "object",
+                        "additionalProperties": False,
+                        "properties": {
+                            "x": {"type": "number"},
+                            "y": {"type": "number"},
+                            "z": {"type": "number"},
+                        },
+                        "required": ["x", "y", "z"],
                     },
                     "color": {"type": "string", "description": "BrickColor or hex"},
                     "anchored": {"type": "boolean"},

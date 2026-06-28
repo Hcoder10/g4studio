@@ -141,6 +141,33 @@ class CerebrasClient:
             parsed = {}
         return parsed, turn
 
+    async def structured(self, system: str, user: str, schema: dict,
+                         name: str = "result", max_tokens: Optional[int] = None) -> tuple[dict, Turn]:
+        """Structured output via a forced tool call — the confirmed-reliable path on
+        Cerebras (strict schemas must avoid minItems/maxItems). Returns (args, turn)."""
+        tools = [{
+            "type": "function",
+            "function": {
+                "name": name,
+                "description": "Return the structured result.",
+                "strict": True,
+                "parameters": schema,
+            },
+        }]
+        messages = [{"role": "system", "content": system},
+                    {"role": "user", "content": user}]
+        turn = await self.chat(
+            messages, tools=tools,
+            tool_choice={"type": "function", "function": {"name": name}},
+            max_tokens=max_tokens,
+        )
+        if turn.tool_calls:
+            return turn.tool_calls[0]["args"], turn
+        try:
+            return json.loads(turn.text or "{}"), turn
+        except json.JSONDecodeError:
+            return {}, turn
+
     @staticmethod
     def image_message(text: str, data_uri: str, role: str = "user") -> dict:
         """Build a multimodal message with a base64 data-URI image (Cerebras only
