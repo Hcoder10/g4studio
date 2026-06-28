@@ -17,6 +17,7 @@ from typing import Any, Callable, Optional
 from .cerebras import CerebrasClient, Turn
 from .ops import GameSpec, spec_from_dict
 from .genre_simulator import run_simulator
+from .genre_custom import run_custom
 
 # ---- schema fragments (strict-mode safe) ----------------------------------
 VEC3 = {
@@ -297,28 +298,30 @@ async def run_obby(prompt: str, client: CerebrasClient,
 GENRE_SCHEMA = {
     "type": "object", "additionalProperties": False,
     "properties": {
-        "genre": {"type": "string", "enum": ["obby", "simulator"]},
+        "genre": {"type": "string", "enum": ["obby", "simulator", "custom"]},
         "reason": {"type": "string"},
     },
     "required": ["genre", "reason"],
 }
 
-CLASSIFY_SYSTEM = """Classify the Roblox game the user wants into ONE genre:
+CLASSIFY_SYSTEM = """Classify the Roblox game the user wants into ONE category:
 - "obby": an obstacle course / parkour — jumping across platforms, avoiding lava/hazards,
-  reaching a finish (keywords: obby, parkour, jump, tower, climb, course, avoid, lava).
+  reaching a finish (keywords: obby, parkour, jump, tower, climb, course).
 - "simulator": walk around collecting things to earn currency and buy upgrades
-  (keywords: simulator, collect, gather, farm, coins, pets, upgrade, grind, tycoon, money).
-Pick the closest. If genuinely unclear, choose "obby"."""
+  (keywords: simulator, collect, gather, farm, coins, pets, upgrade, grind).
+- "custom": ANY OTHER kind of game — tycoon, PvP/battle, tag, racing, maze, clicker,
+  survival, tower defense, hide-and-seek, king-of-the-hill, dropper, or any novel idea.
+Choose "obby" or "simulator" ONLY for a clear, strong match; otherwise choose "custom"."""
 
 
 async def classify_genre(client: CerebrasClient, prompt: str) -> str:
     try:
         out, _ = await client.structured(CLASSIFY_SYSTEM, prompt, GENRE_SCHEMA,
                                          name="genre", max_tokens=150, temperature=0.1)
-        g = out.get("genre", "obby")
-        return g if g in ("obby", "simulator") else "obby"
+        g = out.get("genre", "custom")
+        return g if g in ("obby", "simulator", "custom") else "custom"
     except Exception:
-        return "obby"
+        return "custom"
 
 
 async def generate_game(prompt: str, client: Optional[CerebrasClient] = None,
@@ -332,6 +335,8 @@ async def generate_game(prompt: str, client: Optional[CerebrasClient] = None,
         _emit(on_event, "genre", genre=genre)
         if genre == "simulator":
             return await run_simulator(prompt, client, on_event)
+        if genre == "custom":
+            return await run_custom(prompt, client, on_event)
         return await run_obby(prompt, client, on_event)
     finally:
         if own:

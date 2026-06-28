@@ -19,7 +19,7 @@ def on_event(e: dict) -> None:
     if t == "genre":
         print(f"  [router] genre = {e.get('genre')}")
     elif t == "director_started":
-        print("  [director] designing the obby...")
+        print("  [director] designing the game...")
     elif t == "director_done":
         print(f"  [director] '{e.get('name')}' - {e.get('stages')} stages "
               f"({e.get('tps')} tok/s, {e.get('ms')} ms)")
