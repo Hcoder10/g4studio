@@ -5,6 +5,7 @@ Run:  python backend/server.py   (then open http://127.0.0.1:8000)
 import asyncio
 import os
 import sys
+import uuid
 
 from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse
@@ -14,6 +15,8 @@ sys.path.insert(0, os.path.dirname(__file__))
 
 from g4studio.swarm import generate_game  # noqa: E402
 from g4studio.emit import to_rbxmx, to_luau, to_build  # noqa: E402
+from g4studio.emit.plugin_ops import to_plugin_event  # noqa: E402
+from g4studio.mechanics import get_mechanics_luau  # noqa: E402
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 FRONTEND = os.path.join(REPO, "frontend")
@@ -49,6 +52,55 @@ async def api_generate(req: Request):
 
 
 app.mount("/static", StaticFiles(directory=FRONTEND), name="static")
+
+
+# ---- Streaming jobs for the plugin (poll-based; HttpService can't do WS) ----
+JOBS: dict = {}
+
+
+@app.post("/api/generate/start")
+async def gen_start(req: Request):
+    body = await req.json()
+    prompt = (body.get("prompt") or "").strip()
+    if not prompt:
+        return {"error": "empty prompt"}
+    job_id = uuid.uuid4().hex[:12]
+    job = {"events": [], "done": False}
+    JOBS[job_id] = job
+
+    def on_event(e: dict) -> None:
+        pe = to_plugin_event(e)
+        if pe:
+            job["events"].append(pe)
+
+    async def run() -> None:
+        try:
+            spec, metrics = await generate_game(prompt, on_event=on_event)
+            job["events"].append({
+                "type": "done", "name": spec.name, "metrics": metrics,
+                "mechanics": get_mechanics_luau(), "rbxmx": to_rbxmx(spec),
+            })
+        except Exception as ex:
+            job["events"].append({"type": "error", "error": str(ex)[:300]})
+        finally:
+            job["done"] = True
+
+    job["task"] = asyncio.create_task(run())
+    # keep the job table from growing unbounded across a long session
+    if len(JOBS) > 64:
+        for k in [k for k, v in list(JOBS.items())[:32] if v.get("done")]:
+            JOBS.pop(k, None)
+    return {"job_id": job_id}
+
+
+@app.get("/api/generate/poll")
+async def gen_poll(job: str, cursor: int = 0):
+    j = JOBS.get(job)
+    if not j:
+        return {"error": "no such job", "done": True, "events": [], "cursor": cursor}
+    evs = j["events"][cursor:]
+    new_cursor = cursor + len(evs)
+    return {"events": evs, "cursor": new_cursor, "done": j["done"] and new_cursor >= len(j["events"])}
 
 
 @app.websocket("/ws/generate")

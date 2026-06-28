@@ -1,9 +1,10 @@
 """Canonical build-op vocabulary.
 
 The swarm thinks in high-level *obby primitives* (platforms, hazards, checkpoints,
-moving platforms, spawn, win). Emitters expand these into correct Roblox instances
-plus the templated mechanics scripts. This is the "genre template" that makes
-LLM output reliable: the model designs layout/theme, we guarantee engineering.
+moving platforms, spinners, decorations, spawn, win). Emitters expand these into
+correct Roblox instances plus the templated mechanics scripts. This is the "genre
+template" that makes LLM output reliable: the model designs layout/theme, we
+guarantee engineering.
 
 Plain dataclasses (no third-party deps) so the offline artifact path always runs.
 Coordinates: pos = part CENTER (x, y, z) in studs. Players stand on pos.y + size_y/2.
@@ -60,12 +61,34 @@ class Moving:
     """Platform that tweens back and forth along an axis."""
     pos: Vec3
     size: Vec3 = (8.0, 1.0, 8.0)
-    axis: str = "x"            # x | y | z
+    axis: str = "x"            # x | z
     distance: float = 16.0     # studs of travel
     speed: float = 8.0         # studs / sec
     color: str = "#4aa3ff"
     material: str = "SmoothPlastic"
     kind: str = "moving"
+
+
+@dataclass
+class Spinner:
+    """Rotating kill-bar that sweeps over a platform. Touch = death."""
+    pos: Vec3
+    size: Vec3 = (16.0, 1.0, 1.0)
+    axis: str = "y"            # rotation axis: x | y | z
+    speed: float = 90.0        # degrees / sec
+    color: str = "#ff2d75"
+    material: str = "Neon"
+    kind: str = "spinner"
+
+
+@dataclass
+class Decoration:
+    """Non-collidable visual flair (pillars, crystals, arches) for theme/richness."""
+    pos: Vec3
+    size: Vec3 = (2.0, 12.0, 2.0)
+    color: str = "#7c4dff"
+    material: str = "Neon"
+    kind: str = "decoration"
 
 
 @dataclass
@@ -94,27 +117,37 @@ class GameSpec:
     hazards: List[Hazard] = field(default_factory=list)
     checkpoints: List[Checkpoint] = field(default_factory=list)
     moving: List[Moving] = field(default_factory=list)
+    spinners: List[Spinner] = field(default_factory=list)
+    decor: List[Decoration] = field(default_factory=list)
 
     def part_count(self) -> int:
         return (
             len(self.platforms) + len(self.hazards) + len(self.checkpoints)
-            + len(self.moving) + 2  # spawn + win
+            + len(self.moving) + len(self.spinners) + len(self.decor) + 2  # spawn + win
         )
 
 
-def spec_from_dict(d: dict) -> GameSpec:
-    """Build a GameSpec from loose LLM JSON.
+# kind aliases -> canonical bucket
+_KIND_MAP = {
+    "platform": "platform", "block": "platform", "floor": "platform",
+    "hazard": "hazard", "kill": "hazard", "lava": "hazard", "spike": "hazard",
+    "checkpoint": "checkpoint", "flag": "checkpoint",
+    "moving": "moving", "movingplatform": "moving", "platform_moving": "moving",
+    "spinner": "spinner", "spinning": "spinner", "spinbar": "spinner", "blade": "spinner",
+    "decoration": "decoration", "decor": "decoration", "prop": "decoration", "pillar": "decoration",
+    "spawn": "spawn", "win": "win",
+}
 
-    Accepts either grouped lists (platforms/hazards/...) or a single flat
-    `elements` list where each item carries a `kind`. Tolerant of missing fields.
-    """
+
+def spec_from_dict(d: dict) -> GameSpec:
+    """Build a GameSpec from loose LLM JSON. Tolerant of missing fields; accepts
+    grouped lists (platforms/hazards/...) and/or a flat `elements` list with `kind`."""
     spec = GameSpec(
         name=str(d.get("name", "G4 Obby")),
         theme=str(d.get("theme", "")),
         difficulty=str(d.get("difficulty", "medium")),
     )
 
-    # Spawn / win (top-level or inside elements)
     if isinstance(d.get("spawn"), dict):
         spec.spawn = Spawn(pos=_vec3(d["spawn"].get("pos"), (0.0, 4.0, 0.0)))
     if isinstance(d.get("win"), dict):
@@ -125,30 +158,27 @@ def spec_from_dict(d: dict) -> GameSpec:
                        material=str(w.get("material", "Neon")))
 
     def add_element(e: dict) -> None:
-        kind = str(e.get("kind", e.get("type", "platform"))).lower()
-        if kind in ("platform", "block", "floor"):
+        kind = _KIND_MAP.get(str(e.get("kind", e.get("type", "platform"))).lower(), "platform")
+        if kind == "platform":
             spec.platforms.append(Platform(
                 pos=_vec3(e.get("pos"), (0.0, 4.0, 0.0)),
                 size=_vec3(e.get("size"), (8.0, 1.0, 8.0)),
                 color=str(e.get("color", "#9aa0a6")),
-                material=str(e.get("material", "SmoothPlastic")),
-            ))
-        elif kind in ("hazard", "kill", "lava", "spike"):
+                material=str(e.get("material", "SmoothPlastic"))))
+        elif kind == "hazard":
             spec.hazards.append(Hazard(
                 pos=_vec3(e.get("pos"), (0.0, 4.0, 0.0)),
                 size=_vec3(e.get("size"), (8.0, 1.0, 8.0)),
                 color=str(e.get("color", "#ff5a1f")),
-                material=str(e.get("material", "Neon")),
-            ))
-        elif kind in ("checkpoint", "flag"):
+                material=str(e.get("material", "Neon"))))
+        elif kind == "checkpoint":
             spec.checkpoints.append(Checkpoint(
                 index=int(e.get("index", len(spec.checkpoints) + 1)),
                 pos=_vec3(e.get("pos"), (0.0, 4.0, 0.0)),
                 size=_vec3(e.get("size"), (8.0, 1.0, 8.0)),
                 color=str(e.get("color", "#39d353")),
-                material=str(e.get("material", "Neon")),
-            ))
-        elif kind in ("moving", "movingplatform", "platform_moving"):
+                material=str(e.get("material", "Neon"))))
+        elif kind == "moving":
             spec.moving.append(Moving(
                 pos=_vec3(e.get("pos"), (0.0, 4.0, 0.0)),
                 size=_vec3(e.get("size"), (8.0, 1.0, 8.0)),
@@ -156,8 +186,21 @@ def spec_from_dict(d: dict) -> GameSpec:
                 distance=float(e.get("distance", 16.0)),
                 speed=float(e.get("speed", 8.0)),
                 color=str(e.get("color", "#4aa3ff")),
-                material=str(e.get("material", "SmoothPlastic")),
-            ))
+                material=str(e.get("material", "SmoothPlastic"))))
+        elif kind == "spinner":
+            spec.spinners.append(Spinner(
+                pos=_vec3(e.get("pos"), (0.0, 4.0, 0.0)),
+                size=_vec3(e.get("size"), (16.0, 1.0, 1.0)),
+                axis=str(e.get("axis", "y")).lower()[:1] or "y",
+                speed=float(e.get("speed", 90.0)),
+                color=str(e.get("color", "#ff2d75")),
+                material=str(e.get("material", "Neon"))))
+        elif kind == "decoration":
+            spec.decor.append(Decoration(
+                pos=_vec3(e.get("pos"), (0.0, 4.0, 0.0)),
+                size=_vec3(e.get("size"), (2.0, 12.0, 2.0)),
+                color=str(e.get("color", "#7c4dff")),
+                material=str(e.get("material", "Neon"))))
         elif kind == "spawn":
             spec.spawn = Spawn(pos=_vec3(e.get("pos"), (0.0, 4.0, 0.0)))
         elif kind == "win":
@@ -169,13 +212,17 @@ def spec_from_dict(d: dict) -> GameSpec:
     for e in d.get("elements", []) or []:
         if isinstance(e, dict):
             add_element(e)
-    for key in ("platforms", "hazards", "checkpoints", "moving"):
+    group_kinds = {
+        "platforms": "platform", "hazards": "hazard", "checkpoints": "checkpoint",
+        "moving": "moving", "spinners": "spinner", "decor": "decoration",
+        "decorations": "decoration",
+    }
+    for key, kind in group_kinds.items():
         for e in d.get(key, []) or []:
             if isinstance(e, dict):
-                e.setdefault("kind", key.rstrip("s") if key != "moving" else "moving")
+                e.setdefault("kind", kind)
                 add_element(e)
 
-    # Re-number checkpoints in build order if indices are missing/dup.
     for i, cp in enumerate(spec.checkpoints, start=1):
         if cp.index <= 0:
             cp.index = i

@@ -79,6 +79,14 @@ def to_rbxmx(spec: GameSpec) -> str:
         _part(ref, "Part", f"Move_{m.axis}_{m.distance}_{m.speed}", m.pos, m.size, m.color, m.material)
         for m in spec.moving
     )
+    spinners = "\n".join(
+        _part(ref, "Part", f"Spin_{s.axis}_{s.speed}", s.pos, s.size, s.color, s.material)
+        for s in spec.spinners
+    )
+    decor = "\n".join(
+        _part(ref, "Part", f"Decor{i + 1}", d.pos, d.size, d.color, d.material, can_collide=False)
+        for i, d in enumerate(spec.decor)
+    )
 
     spawn = _part(ref, "SpawnLocation", "Spawn", spec.spawn.pos, (8.0, 1.0, 8.0),
                   "#cfd8dc", "SmoothPlastic")
@@ -90,6 +98,8 @@ def to_rbxmx(spec: GameSpec) -> str:
         _folder(ref, "Hazards", hazards),
         _folder(ref, "Checkpoints", checkpoints),
         _folder(ref, "Moving", moving),
+        _folder(ref, "Spinners", spinners),
+        _folder(ref, "Decor", decor),
         spawn,
         win,
         mechanics,

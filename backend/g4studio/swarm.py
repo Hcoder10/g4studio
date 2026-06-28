@@ -46,6 +46,26 @@ _MOVING = {
     "required": ["pos", "size", "color", "axis", "distance", "speed"],
 }
 
+_SPINNER = {
+    "type": "object",
+    "additionalProperties": False,
+    "properties": {
+        "pos": VEC3,
+        "size": VEC3,  # a long thin bar, e.g. {x:16,y:1,z:1}
+        "color": {"type": "string"},
+        "axis": {"type": "string", "enum": ["x", "y", "z"]},  # rotation axis
+        "speed": {"type": "number"},  # degrees / sec
+    },
+    "required": ["pos", "size", "color", "axis", "speed"],
+}
+
+_DECO = {
+    "type": "object",
+    "additionalProperties": False,
+    "properties": {"pos": VEC3, "size": VEC3, "color": {"type": "string"}},
+    "required": ["pos", "size", "color"],
+}
+
 DIRECTOR_SCHEMA = {
     "type": "object",
     "additionalProperties": False,
@@ -81,8 +101,10 @@ BUILDER_SCHEMA = {
         "hazards": {"type": "array", "items": _ELEM},
         "checkpoints": {"type": "array", "items": _ELEM},
         "moving": {"type": "array", "items": _MOVING},
+        "spinners": {"type": "array", "items": _SPINNER},
+        "decorations": {"type": "array", "items": _DECO},
     },
-    "required": ["platforms", "hazards", "checkpoints", "moving"],
+    "required": ["platforms", "hazards", "checkpoints", "moving", "spinners", "decorations"],
 }
 
 # ---- prompts ---------------------------------------------------------------
@@ -91,7 +113,7 @@ Given a player's prompt, design a complete, fun, PLAYABLE obstacle course as a
 sequence of stages laid out along the +Z axis (Z increases toward the finish).
 
 You MUST follow EVERY rule:
-- Output BETWEEN 4 AND 6 stages. NEVER fewer than 4. Each stage is a distinct section
+- Output BETWEEN 5 AND 7 stages. NEVER fewer than 5. Each stage is a distinct section
   with its own mechanic and its own stretch of the path. A one-stage obby is unacceptable.
 - Honor the player's SPECIFIC requests. If they mention moving platforms, make at least one
   stage's `mechanic` explicitly about moving platforms. If they mention N checkpoints, set
@@ -102,7 +124,8 @@ You MUST follow EVERY rule:
   <= 5 studs (a character jumps ~7 high, ~16 across — keep it comfortable).
 - Advance ~25-40 studs in +Z per stage and ascend gently overall. Y is up; units are studs.
 - Vary mechanics across stages: rising steps, gaps over lava, moving platforms, narrow beams,
-  zig-zag, spiral. `mechanic` is a short build instruction for the builder.
+  zig-zag, spiral, rotating spinner blades. `mechanic` is a short build instruction for the builder.
+- Make it feel like a real, polished game — stages should be rich, not bare.
 - `palette`: 2-4 HEX colors (e.g. "#1de9b6") fitting the theme. Colors MUST be hex.
 
 Example anchor progression (4 stages): start {x:0,y:4,z:0} -> {x:0,y:8,z:32} ->
@@ -112,7 +135,7 @@ BUILDER_SYSTEM = """You are a BUILDER agent constructing ONE stage of a Roblox o
 You are given the stage's start anchor, end anchor, mechanic, palette, and difficulty.
 Fill the stage with parts the player can traverse from `start` to `end`.
 
-Output strict JSON with four typed lists (platforms, hazards, checkpoints, moving):
+Output strict JSON with six typed lists (platforms, hazards, checkpoints, moving, spinners, decorations):
 - platforms: standing parts, typically ~8 x 1 x 8 studs. Place them so each is within a
   comfortable jump of the next (<= 12 studs apart horizontally, <= 5 studs rise).
 - hazards: lava/kill bricks. Place them in the GAPS or BELOW the jump path so that
@@ -122,10 +145,18 @@ Output strict JSON with four typed lists (platforms, hazards, checkpoints, movin
   speed (6-10). Use these only when the mechanic calls for it.
 
 Rules:
+- spinners: rotating kill-bars that sweep over a platform. Give pos (above a platform),
+  size = a long thin bar like {x:16,y:1,z:1}, axis "y" (sweeps horizontally), speed 60-180.
+  Use when the mechanic calls for spinning blades.
+- decorations: NON-blocking themed visual props (pillars, crystals, arches, signs, lamps).
+  Add 3-6 per stage BESIDE the path (never on it) to make the level feel like a real game,
+  matching the theme and palette.
+
+Rules:
 - Use ABSOLUTE world coordinates in studs (not relative). Begin at `start`, end at `end`.
 - All colors MUST be hex (e.g. "#4aa3ff"), drawn from the given palette.
-- Aim for 4 to 8 platforms so the stage feels substantial (more for longer stages).
-- If the mechanic mentions moving platforms, you MUST output one or more `moving` entries.
+- Aim for 6 to 10 platforms so the stage feels substantial.
+- If the mechanic mentions moving platforms or spinners, you MUST output those entries.
 - Keep it clean and beatable. Return empty lists for categories you don't use."""
 
 
@@ -167,7 +198,8 @@ async def _run_builder(client: CerebrasClient, idx: int, stage: dict,
     except Exception as e:  # one bad stage shouldn't kill the game
         _emit(cb, "builder_error", stage=idx, error=str(e)[:200])
         return {}, None
-    counts = {k: len(out.get(k, []) or []) for k in ("platforms", "hazards", "checkpoints", "moving")}
+    counts = {k: len(out.get(k, []) or []) for k in
+              ("platforms", "hazards", "checkpoints", "moving", "spinners", "decorations")}
     _emit(cb, "builder_done", stage=idx, name=stage.get("name"), counts=counts,
           elements=out, tokens=turn.completion_tokens,
           tps=round(turn.tokens_per_sec), ms=round(turn.latency_ms))
@@ -188,7 +220,7 @@ async def generate_game(prompt: str, client: Optional[CerebrasClient] = None,
         "Design the obby now. At least 4 distinct stages, one continuous path, and honor "
         "every specific thing the player asked for (mechanics, moving platforms, checkpoints)."
     )
-    MIN_STAGES = 4
+    MIN_STAGES = 5
     spec_json, dturn = await client.structured(
         DIRECTOR_SYSTEM, director_user, DIRECTOR_SCHEMA, name="game_spec",
         max_tokens=4000, temperature=0.45)
@@ -222,11 +254,12 @@ async def generate_game(prompt: str, client: Optional[CerebrasClient] = None,
         "theme": spec_json.get("theme", ""),
         "difficulty": difficulty,
         "platforms": [], "hazards": [], "checkpoints": [], "moving": [],
+        "spinners": [], "decorations": [],
     }
     for out, turn in results:
         if turn is not None:
             turns.append(turn)
-        for k in ("platforms", "hazards", "checkpoints", "moving"):
+        for k in ("platforms", "hazards", "checkpoints", "moving", "spinners", "decorations"):
             combined[k].extend(out.get(k, []) or [])
 
     if stages:
@@ -246,6 +279,8 @@ async def generate_game(prompt: str, client: Optional[CerebrasClient] = None,
         "hazards": len(spec.hazards),
         "checkpoints": len(spec.checkpoints),
         "moving": len(spec.moving),
+        "spinners": len(spec.spinners),
+        "decor": len(spec.decor),
         "spawn": combined.get("spawn", {}).get("pos"),
         "win": combined.get("win", {}).get("pos"),
     }

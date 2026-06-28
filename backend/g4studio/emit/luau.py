@@ -12,10 +12,12 @@ from .common import hex_to_rgb
 
 
 def _mk(folder: str, name: str, pos, size, color: str, material: str,
-        class_name: str = "Part") -> str:
+        class_name: str = "Part", can_collide: bool = True) -> str:
     r, g, b = hex_to_rgb(color)
+    cc = "true" if can_collide else "false"
     return (
         f'do local p=Instance.new("{class_name}");p.Name="{name}";p.Anchored=true;'
+        f'p.CanCollide={cc};'
         f'p.Size=Vector3.new({size[0]},{size[1]},{size[2]});'
         f'p.CFrame=CFrame.new({pos[0]},{pos[1]},{pos[2]});'
         f'p.Color=Color3.fromRGB({r},{g},{b});p.Material=Enum.Material.{material};'
@@ -29,7 +31,7 @@ def to_luau(spec: GameSpec) -> str:
     L.append("local WS = workspace")
     L.append('local old = WS:FindFirstChild("G4Obby"); if old then old:Destroy() end')
     L.append('local root = Instance.new("Folder"); root.Name = "G4Obby"; root.Parent = WS')
-    for f in ("Platforms", "Hazards", "Checkpoints", "Moving"):
+    for f in ("Platforms", "Hazards", "Checkpoints", "Moving", "Spinners", "Decor"):
         L.append(f'local {f} = Instance.new("Folder"); {f}.Name = "{f}"; {f}.Parent = root')
 
     for i, p in enumerate(spec.platforms):
@@ -40,6 +42,10 @@ def to_luau(spec: GameSpec) -> str:
         L.append(_mk("Checkpoints", f"Checkpoint{c.index}", c.pos, c.size, c.color, c.material))
     for m in spec.moving:
         L.append(_mk("Moving", f"Move_{m.axis}_{m.distance}_{m.speed}", m.pos, m.size, m.color, m.material))
+    for s in spec.spinners:
+        L.append(_mk("Spinners", f"Spin_{s.axis}_{s.speed}", s.pos, s.size, s.color, s.material))
+    for i, d in enumerate(spec.decor):
+        L.append(_mk("Decor", f"Decor{i + 1}", d.pos, d.size, d.color, d.material, can_collide=False))
 
     L.append(_mk("root", "Spawn", spec.spawn.pos, (8.0, 1.0, 8.0), "#cfd8dc", "SmoothPlastic",
                  class_name="SpawnLocation"))

@@ -15,6 +15,7 @@ MECHANICS_LUAU = r"""--!nonstrict
 -- G4Studio obby mechanics (templated)
 local Players = game:GetService("Players")
 local TweenService = game:GetService("TweenService")
+local RunService = game:GetService("RunService")
 
 local root = script.Parent
 local function folder(name)
@@ -111,6 +112,40 @@ if movFolder then
             local info = TweenInfo.new(secs, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut, -1, true)
             TweenService:Create(m, info, { Position = goalPos }):Play()
         end
+    end
+end
+
+-- ===== Spinners (rotating kill-bars) =====
+local spinFolder = folder("Spinners")
+if spinFolder then
+    local spinners = {}
+    for _, s in ipairs(spinFolder:GetChildren()) do
+        if s:IsA("BasePart") then
+            local axis, speed = tostring(s.Name):match("Spin_(%a)_([%d%.]+)")
+            s.Anchored = true
+            table.insert(spinners, {
+                part = s, axis = axis or "y",
+                speed = tonumber(speed) or 90, base = s.CFrame,
+            })
+            s.Touched:Connect(function(hit)
+                local hum = hit.Parent and hit.Parent:FindFirstChildOfClass("Humanoid")
+                if hum and hum.Health > 0 then hum.Health = 0 end
+            end)
+        end
+    end
+    if #spinners > 0 then
+        local t = 0
+        RunService.Heartbeat:Connect(function(dt)
+            t += dt
+            for _, sp in ipairs(spinners) do
+                local ang = math.rad(sp.speed) * t
+                local rot
+                if sp.axis == "x" then rot = CFrame.Angles(ang, 0, 0)
+                elseif sp.axis == "z" then rot = CFrame.Angles(0, 0, ang)
+                else rot = CFrame.Angles(0, ang, 0) end
+                sp.part.CFrame = sp.base * rot
+            end
+        end)
     end
 end
 
