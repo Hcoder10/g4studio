@@ -178,10 +178,21 @@ local function applyOps(ops)
 			inst.Anchored = true
 			inst.CanCollide = (p.cc ~= false)
 			inst.Size = Vector3.new(p.size[1], p.size[2], p.size[3])
-			inst.CFrame = CFrame.new(p.pos[1], p.pos[2], p.pos[3])
+			if p.rot then
+				inst.CFrame = CFrame.new(p.pos[1], p.pos[2], p.pos[3]) * CFrame.Angles(0, math.rad(p.rot), 0)
+			else
+				inst.CFrame = CFrame.new(p.pos[1], p.pos[2], p.pos[3])
+			end
 			inst.Color = Color3.fromRGB(p.color[1], p.color[2], p.color[3])
 			inst.Material = MAT[p.material] or Enum.Material.SmoothPlastic
 			if p.shape and inst:IsA("Part") and SHAPES[p.shape] then inst.Shape = SHAPES[p.shape] end
+			if p.light then
+				local L = Instance.new("PointLight")
+				L.Color = Color3.fromRGB(p.light.color[1], p.light.color[2], p.light.color[3])
+				L.Brightness = p.light.brightness
+				L.Range = p.light.range
+				L.Parent = inst
+			end
 			inst.Parent = getFolder(p.folder)
 		end)
 		if ok and i % 5 == 0 then task.wait() end
@@ -208,13 +219,23 @@ local function handleEvent(ev)
 	elseif ev.type == "stage" then
 		applyOps(ev.ops)
 	elseif ev.type == "done" then
-		if ev.mechanics and buildRoot then
-			local sc = Instance.new("Script"); sc.Name = "G4Mechanics"
-			sc.Source = ev.mechanics; sc.Parent = buildRoot
-		end
 		local m = ev.metrics or {}
-		status.Text = string.format("✅ '%s' · %d parts · %d agents · swarm %d ms · Play to test",
-			tostring(ev.name or "obby"), tonumber(m.parts) or 0, tonumber(m.agents) or 0, tonumber(m.wall_ms) or 0)
+		if ev.authored and ev.script then
+			-- the model authored the whole game as one Script; insert it, build on Play
+			local SSS = game:GetService("ServerScriptService")
+			local oldS = SSS:FindFirstChild("G4GameScript"); if oldS then oldS:Destroy() end
+			local emptyWorld = workspace:FindFirstChild("G4Game"); if emptyWorld then emptyWorld:Destroy() end
+			local sc = Instance.new("Script"); sc.Name = "G4GameScript"; sc.Source = ev.script; sc.Parent = SSS
+			status.Text = string.format("✅ '%s' authored — %d lines, %d agents. Press PLAY to build & play.",
+				tostring(ev.name or "game"), tonumber(m.lines) or 0, tonumber(m.agents) or 0)
+		else
+			if ev.mechanics and buildRoot then
+				local sc = Instance.new("Script"); sc.Name = "G4Mechanics"
+				sc.Source = ev.mechanics; sc.Parent = buildRoot
+			end
+			status.Text = string.format("✅ '%s' · %d parts · %d agents · %d ms · Play to test",
+				tostring(ev.name or "game"), tonumber(m.parts) or 0, tonumber(m.agents) or 0, tonumber(m.wall_ms) or 0)
+		end
 		return true
 	elseif ev.type == "error" then
 		status.Text = "Error: " .. tostring(ev.error)

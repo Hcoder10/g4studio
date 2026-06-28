@@ -22,19 +22,28 @@ def xyz(v: Any, default=(0.0, 4.0, 0.0)) -> list:
     return [float(default[0]), float(default[1]), float(default[2])]
 
 
-def op(folder: str, name: str, pos, size, color, material: str = "SmoothPlastic",
-       cc: bool = True, klass: str = "Part", shape: str = "Block") -> dict:
+def _rgb(color, default=(154, 160, 166)):
     if isinstance(color, str):
-        r, g, b = hex_to_rgb(color)
-    elif isinstance(color, (list, tuple)) and len(color) == 3:
-        r, g, b = int(color[0]), int(color[1]), int(color[2])
-    else:
-        r, g, b = (154, 160, 166)
+        return list(hex_to_rgb(color))
+    if isinstance(color, (list, tuple)) and len(color) == 3:
+        return [int(color[0]), int(color[1]), int(color[2])]
+    return list(default)
+
+
+def op(folder: str, name: str, pos, size, color, material: str = "SmoothPlastic",
+       cc: bool = True, klass: str = "Part", shape: str = "Block",
+       rot: float = 0.0, light=None) -> dict:
     d = {"folder": folder, "class": klass, "name": name,
          "pos": xyz(pos), "size": xyz(size, (4, 1, 4)),
-         "color": [r, g, b], "material": material, "cc": cc}
+         "color": _rgb(color), "material": material, "cc": cc}
     if shape and shape != "Block":
         d["shape"] = shape
+    if rot:
+        d["rot"] = round(float(rot), 1)
+    if light:
+        d["light"] = {"color": _rgb(light.get("color", color)),
+                      "brightness": float(light.get("brightness", 2)),
+                      "range": float(light.get("range", 16))}
     return d
 
 

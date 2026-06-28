@@ -18,6 +18,7 @@ from .cerebras import CerebrasClient, Turn
 from .ops import GameSpec, spec_from_dict
 from .genre_simulator import run_simulator
 from .genre_custom import run_custom
+from .authored import run_authored
 
 # ---- schema fragments (strict-mode safe) ----------------------------------
 VEC3 = {
@@ -350,10 +351,16 @@ async def generate_game(prompt: str, client: Optional[CerebrasClient] = None,
     own = client is None
     client = client or CerebrasClient()
     try:
-        genre = force_genre if force_genre in ("obby", "simulator", "custom") \
-            else await classify_genre(client, prompt)
+        if force_genre in ("obby", "simulator", "custom"):
+            genre = force_genre
+        else:
+            genre = "authored"  # DEFAULT: the model authors the whole game (full control)
         _emit(on_event, "genre", genre=genre)
 
+        if genre == "authored":
+            return await run_authored(prompt, client, on_event)
+
+        # --- preset genres (opt-in via force_genre) with the vision playtest loop ---
         from .playtester import run_playtest
         attempt, feedback, pt = 0, None, None
         build, metrics = {}, {}

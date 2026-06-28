@@ -75,15 +75,17 @@ async def gen_start(req: Request):
     async def run() -> None:
         try:
             build, metrics = await generate_game(prompt, on_event=on_event)
-            mech = ""
-            for s in build.get("scripts", []):
-                if s.get("name") == "G4Mechanics":
-                    mech = s.get("source", "")
-                    break
-            job["events"].append({
-                "type": "done", "name": build.get("name"), "metrics": metrics,
-                "mechanics": mech, "rbxmx": build_to_rbxmx(build),
-            })
+            done_ev = {"type": "done", "name": build.get("name"), "metrics": metrics,
+                       "rbxmx": build_to_rbxmx(build)}
+            if build.get("authored"):
+                done_ev["authored"] = True
+                done_ev["script"] = build.get("script", "")
+            else:
+                for s in build.get("scripts", []):
+                    if s.get("name") == "G4Mechanics":
+                        done_ev["mechanics"] = s.get("source", "")
+                        break
+            job["events"].append(done_ev)
         except Exception as ex:
             job["events"].append({"type": "error", "error": str(ex)[:300]})
         finally:
