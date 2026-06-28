@@ -23,16 +23,19 @@ def xyz(v: Any, default=(0.0, 4.0, 0.0)) -> list:
 
 
 def op(folder: str, name: str, pos, size, color, material: str = "SmoothPlastic",
-       cc: bool = True, klass: str = "Part") -> dict:
+       cc: bool = True, klass: str = "Part", shape: str = "Block") -> dict:
     if isinstance(color, str):
         r, g, b = hex_to_rgb(color)
     elif isinstance(color, (list, tuple)) and len(color) == 3:
         r, g, b = int(color[0]), int(color[1]), int(color[2])
     else:
         r, g, b = (154, 160, 166)
-    return {"folder": folder, "class": klass, "name": name,
-            "pos": xyz(pos), "size": xyz(size, (4, 1, 4)),
-            "color": [r, g, b], "material": material, "cc": cc}
+    d = {"folder": folder, "class": klass, "name": name,
+         "pos": xyz(pos), "size": xyz(size, (4, 1, 4)),
+         "color": [r, g, b], "material": material, "cc": cc}
+    if shape and shape != "Block":
+        d["shape"] = shape
+    return d
 
 
 def emit_ev(cb, type_: str, **data) -> None:

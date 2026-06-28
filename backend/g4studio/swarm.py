@@ -328,7 +328,7 @@ async def classify_genre(client: CerebrasClient, prompt: str) -> str:
 
 
 GOOD_SCORE = 6        # playtester score that counts as "good enough"
-MAX_REDESIGNS = 2     # how many times the playtester may send it back
+MAX_REDESIGNS = 1     # one redesign attempt if rejected (bounds latency)
 
 
 async def _dispatch(genre: str, prompt: str, client, on_event, feedback):

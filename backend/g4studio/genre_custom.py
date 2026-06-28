@@ -18,6 +18,7 @@ import time
 
 from .cerebras import CerebrasClient
 from .genre_common import VEC3, emit_ev, op, xyz
+from .assets import ASSET_NAMES, expand as expand_asset
 
 _HEX = {"type": "string"}
 
@@ -31,13 +32,11 @@ DESIGNER_SCHEMA = {
         "objects": {"type": "array", "items": {
             "type": "object", "additionalProperties": False,
             "properties": {
-                "key": {"type": "string"},      # PascalCase folder name
-                "role": {"type": "string"},     # what it does in the game
-                "color": _HEX,
-                "material": {"type": "string"},
-                "size": VEC3,
+                "key": {"type": "string"},                          # PascalCase folder name
+                "role": {"type": "string"},                         # what it does in the game
+                "asset": {"type": "string", "enum": ASSET_NAMES},   # prebuilt asset representing it
             },
-            "required": ["key", "role", "color", "material", "size"]}},
+            "required": ["key", "role", "asset"]}},
         "areas": {"type": "array", "items": {
             "type": "object", "additionalProperties": False,
             "properties": {
@@ -71,32 +70,39 @@ SCRIPT_SCHEMA = {
     "required": ["source"],
 }
 
-DESIGNER_SYSTEM = """You are the lead designer of an automated Roblox studio that can build
-ANY kind of game from a prompt. Design a complete, fun, BUILDABLE game.
+DESIGNER_SYSTEM = """You are the lead designer of an automated Roblox studio that builds ANY
+kind of game from a prompt using a kit of PREBUILT ASSETS. Design a complete, fun, lively game.
+
+The world is a BOUNDED ARENA ~120x120 studs centered on the origin (floor + perimeter walls are
+added for you). Keep all coordinates within x,z in [-50, 50].
 
 Output:
-- `objects`: the catalog of object TYPES the world is made of. Each has a `key`
-  (ONE PascalCase word, no spaces, e.g. "Coin", "Enemy", "Button", "Goal", "Platform",
-  "Wall", "Lava"), a `role` (what it does in gameplay), color (hex), material, and size.
-  Always include a walkable surface object (e.g. "Platform" or "Floor") unless the whole
-  map is one ground plane.
-- `areas`: regions of the map. Each lists `contents` = which object keys to place and how
-  many. Builders will scatter them in the area. Spread areas around the spawn.
-- `spawn`: where players start (on the ground, y a few studs up).
-- `mechanics`: PRECISE rules describing exactly how the game plays — what the player does,
-  what each object type DOES, scoring, timing, win/lose. Reference object keys by name.
-  Be concrete enough that a programmer can implement it with no further questions.
+- `objects`: the catalog of object TYPES. Each has a `key` (ONE PascalCase word, e.g. "Coin",
+  "Enemy", "Tree", "Goal"), a `role` (what it does), and an `asset` from the kit:
+  GAMEPLAY assets (use for anything the rules touch): coin, gem, orb, button, flag, coin_pile.
+  DECOR / STRUCTURE assets (for looks): tree, pine, rock, boulder, bush, crate, barrel, pillar,
+  arch, torch, lamp, crystal, fence, tent, platform, wall, ramp.
+  Pick the asset that best fits each object's role. Include SEVERAL decor object types so the
+  arena feels alive (trees, rocks, torches, etc.).
+- `areas`: regions of the arena. Each lists `contents` = which object keys to place and how many.
+  Spread areas across the arena and pack them with decor.
+- `spawn`: where players start (near origin).
+- `mechanics`: PRECISE rules — what the player does, what each object type DOES, scoring, timing,
+  win/lose. Reference object keys by name. Concrete enough to implement with no questions.
 - `win`: the win/lose condition.
-- BOUNDED ARENA: include a "Wall" object type and place walls around the play-area perimeter so
-  the level reads as an enclosed level, not a flat empty plane. Pack objects DENSELY on the
-  surfaces — aim for a full, lively map, not a few scattered blocks.
-Coordinates in studs, Y up. Colors hex. Make it a real, playable game."""
+Make it a real, lively game with a clear objective and lots of decoration."""
 
-AREA_SYSTEM = """You are a BUILDER placing objects for ONE area of a Roblox map.
-Given the area bounds and the list of (object key, count) to place, output `placements`:
-for each object instance, an absolute world position INSIDE the area. Spread them sensibly
-(surfaces/platforms low and walkable; collectibles slightly above surfaces; walls at edges).
-Use the exact object keys given. Coordinates in studs."""
+AREA_SYSTEM = """You are a BUILDER placing prebuilt assets for ONE area of a Roblox arena. You only
+choose POSITIONS (the asset art is placed for you). Given the area and the (object key, count) list,
+output `placements`: an absolute world position for each instance, ON the floor (y near 0 — the
+asset stacks upward itself).
+
+Place things with a level designer's INTENT, for example:
+- A row of 6 Trees along a path: x steps by ~9 each at the same z, e.g. (-22,0,12),(-13,0,12),(-4,0,12)...
+- A ring of 8 Torches around center (0,0,0) radius ~16: points spaced around the circle.
+- A cluster of Rocks: 4-5 positions within a ~10-stud blob.
+- Collectibles in a trail or grid the player follows; the Goal at the far end.
+Spread them out, avoid overlaps, stay inside the area (x,z within [-50,50]). Use the exact object keys."""
 
 SCRIPTER_SYSTEM = """You are the GAMEPLAY PROGRAMMER for an automated Roblox studio. You write
 the Luau SERVER SCRIPT that makes the game actually work.
@@ -105,7 +111,8 @@ THE CONTRACT (the world is already built for you):
 - `local root = script.Parent` -- a Folder holding the whole game.
 - Inside root is ONE Folder per object type, named EXACTLY by its key. Each folder holds
   BaseParts. e.g. root:FindFirstChild("Coin"):GetChildren() are the coin parts.
-- A SpawnLocation named "Spawn" and a Folder "Ground" already exist under root.
+- A SpawnLocation named "Spawn" and a Folder "Arena" (floor + perimeter walls) already exist.
+- Decorative folders (Tree, Rock, etc.) also exist; ignore them unless the rules use them.
 
 REQUIREMENTS:
 - Implement the MECHANICS and WIN CONDITION exactly, operating on those folders/parts.
@@ -128,7 +135,7 @@ def _key(s: str) -> str:
     return k[0].upper() + k[1:]
 
 
-async def _area_builder(client, idx, area, catalog, on_event):
+async def _area_builder(client, idx, area, catalog, palette, on_event):
     name = area.get("name", f"Area {idx + 1}")
     emit_ev(on_event, "builder_started", stage=idx, name=name)
     contents = ", ".join(f"{c.get('count', 1)}x {_key(c.get('object'))}" for c in area.get("contents", []))
@@ -144,9 +151,10 @@ async def _area_builder(client, idx, area, catalog, on_event):
     ops = []
     for i, pl in enumerate(placements):
         key = _key(pl.get("object"))
-        cat = catalog.get(key, {"color": "#9aa0a6", "material": "Neon", "size": [3, 3, 3]})
-        ops.append(op(key, f"{key}_a{idx}_{i + 1}", pl.get("pos"), cat["size"], cat["color"], cat["material"]))
-    emit_ev(on_event, "builder_done", stage=idx, name=name, counts={"objects": len(ops)}, ops=ops,
+        asset = catalog.get(key, "crate")
+        anchor = xyz(pl.get("pos"), (0, 0, 0))
+        ops.extend(expand_asset(asset, key, f"{key}_a{idx}_{i + 1}", anchor, palette))
+    emit_ev(on_event, "builder_done", stage=idx, name=name, counts={"objects": len(placements)}, ops=ops,
             tokens=turn.completion_tokens, tps=round(turn.tokens_per_sec), ms=round(turn.latency_ms))
     return ops, turn
 
@@ -192,25 +200,27 @@ async def run_custom(prompt: str, client: CerebrasClient, on_event=None,
     emit_ev(on_event, "director_done", name=name, theme=design.get("theme"), stages=len(areas),
             tokens=dturn.completion_tokens, tps=round(dturn.tokens_per_sec), ms=round(dturn.latency_ms))
 
-    catalog = {}
-    for o in design.get("objects", []):
-        catalog[_key(o.get("key"))] = {
-            "color": o.get("color", "#9aa0a6"), "material": o.get("material", "SmoothPlastic"),
-            "size": xyz(o.get("size"), (4, 1, 4)),
-        }
+    catalog = {_key(o.get("key")): str(o.get("asset", "crate")) for o in design.get("objects", [])}
 
     spawn = xyz(design.get("spawn"), (0, 4, 0))
-    palette = design.get("palette") or ["#3a3f4b"]
-    parts = [
-        op("Ground", "Floor", [spawn[0], 0, spawn[2]], [220, 2, 220], palette[0], "Concrete"),
-        op("_root", "Spawn", spawn, (8, 1, 8), "#cfd8dc", "SmoothPlastic", klass="SpawnLocation"),
+    palette = [c for c in (design.get("palette") or []) if isinstance(c, str)] or ["#3a3f4b", "#6b7280"]
+    AW = 120.0
+    wall_c = palette[1] if len(palette) > 1 else "#6b7280"
+    parts = [  # procedural bounded arena: floor + 4 perimeter walls + spawn
+        op("Arena", "Floor", [0, 0, 0], [AW, 2, AW], palette[0], "Concrete"),
+        op("Arena", "WallN", [0, 7, AW / 2], [AW, 14, 2], wall_c, "Concrete"),
+        op("Arena", "WallS", [0, 7, -AW / 2], [AW, 14, 2], wall_c, "Concrete"),
+        op("Arena", "WallE", [AW / 2, 7, 0], [2, 14, AW], wall_c, "Concrete"),
+        op("Arena", "WallW", [-AW / 2, 7, 0], [2, 14, AW], wall_c, "Concrete"),
+        op("_root", "Spawn", [spawn[0], 4, spawn[2]], (8, 1, 8), "#cfd8dc", "SmoothPlastic",
+           klass="SpawnLocation"),
     ]
     emit_ev(on_event, "stage", ops=list(parts))
 
     # Scripter codes the game in parallel with the area builders (both need only the design).
     scripter_task = asyncio.create_task(_scripter(client, design, on_event))
     builder_results = await asyncio.gather(*[
-        _area_builder(client, i, a, catalog, on_event) for i, a in enumerate(areas)
+        _area_builder(client, i, a, catalog, palette, on_event) for i, a in enumerate(areas)
     ])
     source, sturns = await scripter_task
     turns.extend(sturns)

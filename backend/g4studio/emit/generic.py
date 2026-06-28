@@ -28,14 +28,21 @@ class _Ref:
         return f"G4REF{self.n:08d}"
 
 
+_SHAPE_TOK = {"Ball": 0, "Block": 1, "Cylinder": 2}
+
+
 def _part_xml(ref: _Ref, op: dict) -> str:
     pos, size = op["pos"], op["size"]
     cc = "true" if op.get("cc", True) else "false"
+    shape = op.get("shape")
+    shape_xml = (f'<token name="shape">{_SHAPE_TOK[shape]}</token>'
+                 if shape in _SHAPE_TOK and shape != "Block" else "")
     return (
         f'<Item class="{op.get("class", "Part")}" referent="{ref.next()}"><Properties>'
         f'<string name="Name">{xml_escape(op["name"])}</string>'
         f'<bool name="Anchored">true</bool>'
         f'<bool name="CanCollide">{cc}</bool>'
+        f'{shape_xml}'
         f'<Color3uint8 name="Color">{_packed(op["color"])}</Color3uint8>'
         f'<token name="Material">{material_token(op.get("material", "SmoothPlastic"))}</token>'
         f'<Vector3 name="size"><X>{size[0]}</X><Y>{size[1]}</Y><Z>{size[2]}</Z></Vector3>'
@@ -99,12 +106,16 @@ def build_to_luau(build: dict) -> str:
     for op in build.get("parts", []):
         c = op["color"]
         cc = "true" if op.get("cc", True) else "false"
+        shape = op.get("shape")
+        shape_lua = (f'pcall(function() p.Shape=Enum.PartType.{shape} end);'
+                     if shape in ("Ball", "Cylinder") else "")
         L.append(
             f'do local p=Instance.new("{op.get("class", "Part")}");p.Name="{op["name"]}";'
             f'p.Anchored=true;p.CanCollide={cc};'
             f'p.Size=Vector3.new({op["size"][0]},{op["size"][1]},{op["size"][2]});'
             f'p.CFrame=CFrame.new({op["pos"][0]},{op["pos"][1]},{op["pos"][2]});'
             f'p.Color=Color3.fromRGB({c[0]},{c[1]},{c[2]});p.Material=Enum.Material.{op.get("material", "SmoothPlastic")};'
+            f'{shape_lua}'
             f'p.Parent=folders["{op.get("folder", "_root")}"] or root end'
         )
     for s in build.get("scripts", []):

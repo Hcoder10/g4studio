@@ -12,14 +12,26 @@ from .cerebras import CerebrasClient
 from .genre_common import emit_ev, op
 from .render import render_data_uri
 
-PLAYTEST_SYSTEM = """You are a strict QA PLAYTESTER for auto-generated Roblox games.
-You are shown two orthographic renders of ONE level: LEFT = top-down map (X right, Z up),
-RIGHT = side elevation (Z right, height up). Judge whether it looks like a PLAYABLE,
-well-formed game. Consider: a clear path / sensible layout; platforms reachable (no absurd
-gaps or huge vertical jumps); floating or overlapping parts; too empty or too cluttered;
-presence of a spawn (green dot) and goal (gold dot).
-Output ONLY JSON:
-{"score": <integer 0-10>, "issues": ["short issue", ... up to 5], "verdict": "<one blunt sentence>"}"""
+_OUT = ('Output ONLY JSON: {"score": <integer 0-10>, "issues": ["short issue", ... up to 4], '
+        '"verdict": "<one blunt sentence>"}')
+
+# Linear platformer (obby): a path from spawn to goal matters.
+PLAYTEST_LINEAR = (
+    "You are a QA PLAYTESTER for an auto-generated Roblox OBBY (a linear obstacle course). You see "
+    "two renders: LEFT = top-down map (X right, Z up), RIGHT = side elevation (height up). Judge: a "
+    "clear path from spawn (green dot) to goal (gold dot); platforms reachable (no absurd gaps or "
+    "huge vertical jumps); no floating/overlapping parts; a sensible difficulty progression.\n" + _OUT)
+
+# Open arena (simulator / custom collectathon / sandbox / battle): flat & open is CORRECT.
+PLAYTEST_OPEN = (
+    "You are a QA PLAYTESTER for an auto-generated Roblox ARENA game (collectathon / sandbox / "
+    "battle). You see two renders: LEFT = top-down map (X right, Z up), RIGHT = side elevation. "
+    "This is an OPEN game, NOT a linear obstacle course — a FLAT, BOUNDED arena with objects spread "
+    "around is CORRECT and good. Judge: is there a clear bounded play area (floor, ideally walls)? "
+    "Is it DECORATED and lively (trees/rocks/props), not empty? Are objects placed with intent "
+    "(clusters, rows, rings) rather than truly random? Is there an objective (collectibles spread "
+    "around, or a goal)? Do NOT require a linear path, verticality, or a single gold goal dot — a "
+    "flat ground arena is expected.\n" + _OUT)
 
 
 def _dist_xz(a, b) -> float:
@@ -65,11 +77,12 @@ def _ensure_spawn(build: dict) -> int:
 async def run_playtest(client: CerebrasClient, build: dict, genre: str, name: str, on_event=None):
     emit_ev(on_event, "agent", id="playtester", role="QA", name="Playtester", status="working")
     data_uri = render_data_uri(build)
+    system = PLAYTEST_LINEAR if genre == "obby" else PLAYTEST_OPEN
     try:
         critique, turn = await client.vision_json(
-            PLAYTEST_SYSTEM,
+            system,
             f"This is an auto-generated Roblox {genre} game called '{name}'. "
-            "Grade its playability from these renders. Output only the JSON.",
+            "Grade it from these renders. Output only the JSON.",
             data_uri, max_tokens=1500)
     except Exception as e:
         emit_ev(on_event, "agent", id="playtester", status="done", detail=f"vision error: {str(e)[:60]}")

@@ -25,6 +25,10 @@ local MAT = {
 	Fabric = Enum.Material.Fabric, Ice = Enum.Material.Ice, Glass = Enum.Material.Glass, Foil = Enum.Material.Foil,
 }
 
+local SHAPES = {
+	Ball = Enum.PartType.Ball, Cylinder = Enum.PartType.Cylinder, Block = Enum.PartType.Block,
+}
+
 -- ============================ UI ============================================
 local toolbar = plugin:CreateToolbar("G4 Studio")
 local button = toolbar:CreateButton("G4 Studio",
@@ -177,6 +181,7 @@ local function applyOps(ops)
 			inst.CFrame = CFrame.new(p.pos[1], p.pos[2], p.pos[3])
 			inst.Color = Color3.fromRGB(p.color[1], p.color[2], p.color[3])
 			inst.Material = MAT[p.material] or Enum.Material.SmoothPlastic
+			if p.shape and inst:IsA("Part") and SHAPES[p.shape] then inst.Shape = SHAPES[p.shape] end
 			inst.Parent = getFolder(p.folder)
 		end)
 		if ok and i % 5 == 0 then task.wait() end
