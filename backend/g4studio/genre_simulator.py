@@ -191,11 +191,14 @@ async def _zone_builder(client: CerebrasClient, idx: int, zone: dict, theme: str
     return {"ops": ops, "orbs": orb_cfg, "turn": turn}
 
 
-async def run_simulator(prompt: str, client: CerebrasClient, on_event=None) -> tuple[dict, dict]:
+async def run_simulator(prompt: str, client: CerebrasClient, on_event=None,
+                        feedback=None) -> tuple[dict, dict]:
     t0 = time.perf_counter()
     turns = []
     emit_ev(on_event, "director_started")
-    design, dturn = await client.structured(SIM_DIRECTOR_SYSTEM, prompt, SIM_DIRECTOR_SCHEMA,
+    director_user = prompt if not feedback else \
+        prompt + "\n\nREDESIGN FEEDBACK (the playtester rejected your last attempt — fix these): " + feedback
+    design, dturn = await client.structured(SIM_DIRECTOR_SYSTEM, director_user, SIM_DIRECTOR_SCHEMA,
                                             name="sim_design", max_tokens=3500, temperature=0.5)
     turns.append(dturn)
     name = design.get("name", "Collect Quest")

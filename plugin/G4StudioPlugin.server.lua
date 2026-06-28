@@ -186,6 +186,10 @@ end
 local function handleEvent(ev)
 	if ev.type == "genre" then
 		status.Text = "Genre: " .. tostring(ev.genre) .. " — building live…"
+	elseif ev.type == "redesign" then
+		status.Text = "Playtester rejected (" .. tostring(ev.score) .. "/10) — Designer redesigning…"
+	elseif ev.type == "reset" then
+		ensureRoot(buildRoot and buildRoot.Name or "G4Game")
 	elseif ev.type == "agent" then
 		upsertAgent(ev.id, ev.name, ev.role)
 		if ev.status == "done" then

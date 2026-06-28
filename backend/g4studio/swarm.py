@@ -209,7 +209,8 @@ async def _run_builder(client: CerebrasClient, idx: int, stage: dict,
 
 
 async def run_obby(prompt: str, client: CerebrasClient,
-                   on_event: Optional[Callable] = None) -> tuple[dict, dict]:
+                   on_event: Optional[Callable] = None,
+                   feedback: Optional[str] = None) -> tuple[dict, dict]:
     """Obby genre: prompt -> generic build dict + metrics. Emits streaming events."""
     t0 = time.perf_counter()
     turns: list[Turn] = []
@@ -220,6 +221,8 @@ async def run_obby(prompt: str, client: CerebrasClient,
         "Design the obby now. At least 4 distinct stages, one continuous path, and honor "
         "every specific thing the player asked for (mechanics, moving platforms, checkpoints)."
     )
+    if feedback:
+        director_user += "\n\nREDESIGN FEEDBACK (the playtester rejected your last attempt — fix these): " + feedback
     MIN_STAGES = 5
     spec_json, dturn = await client.structured(
         DIRECTOR_SYSTEM, director_user, DIRECTOR_SCHEMA, name="game_spec",
@@ -324,29 +327,58 @@ async def classify_genre(client: CerebrasClient, prompt: str) -> str:
         return "custom"
 
 
+GOOD_SCORE = 6        # playtester score that counts as "good enough"
+MAX_REDESIGNS = 2     # how many times the playtester may send it back
+
+
+async def _dispatch(genre: str, prompt: str, client, on_event, feedback):
+    if genre == "simulator":
+        return await run_simulator(prompt, client, on_event, feedback)
+    if genre == "custom":
+        return await run_custom(prompt, client, on_event, feedback)
+    return await run_obby(prompt, client, on_event, feedback)
+
+
 async def generate_game(prompt: str, client: Optional[CerebrasClient] = None,
                         on_event: Optional[Callable] = None,
-                        playtest: bool = True) -> tuple[dict, dict]:
-    """Classify the prompt's genre, run that genre's pipeline, then have the vision
-    Playtester grade + fix it. Returns (build_dict, metrics)."""
+                        playtest: bool = True,
+                        force_genre: Optional[str] = None) -> tuple[dict, dict]:
+    """Classify -> build -> Playtester (vision) grades it. If the score is too low,
+    the Playtester sends its critique back to the Designer, who redesigns with accurate
+    instructions and the Builders rebuild — looping until good (or MAX_REDESIGNS).
+    Returns (build_dict, metrics)."""
     own = client is None
     client = client or CerebrasClient()
     try:
-        genre = await classify_genre(client, prompt)
+        genre = force_genre if force_genre in ("obby", "simulator", "custom") \
+            else await classify_genre(client, prompt)
         _emit(on_event, "genre", genre=genre)
-        if genre == "simulator":
-            build, metrics = await run_simulator(prompt, client, on_event)
-        elif genre == "custom":
-            build, metrics = await run_custom(prompt, client, on_event)
-        else:
-            build, metrics = await run_obby(prompt, client, on_event)
 
-        if playtest:
-            from .playtester import run_playtest
+        from .playtester import run_playtest
+        attempt, feedback, pt = 0, None, None
+        build, metrics = {}, {}
+        while True:
+            build, metrics = await _dispatch(genre, prompt, client, on_event, feedback)
+            if not playtest:
+                return build, metrics
             build, pt = await run_playtest(client, build, genre, metrics.get("name", "game"), on_event)
-            metrics["playtest"] = pt
-            metrics["agents"] = metrics.get("agents", 0) + 1  # the Playtester agent
-            metrics["parts"] = len(build.get("parts", []))    # fixes may add parts
+            score = pt.get("score")
+            if score is None or score >= GOOD_SCORE or attempt >= MAX_REDESIGNS:
+                break
+            attempt += 1
+            feedback = (
+                f"Your previous design scored {score}/10. The vision playtester found: "
+                f"{'; '.join(pt.get('issues', []))}. Verdict: {pt.get('verdict', '')} "
+                "Fix ALL of these. Build a clearly BOUNDED arena (a floor with perimeter WALLS), "
+                "connect surfaces into a clear path, place objects DENSELY and on the surfaces "
+                "(not scattered floating debris), and include an obvious goal/objective area.")
+            _emit(on_event, "redesign", attempt=attempt, score=score, issues=pt.get("issues", []))
+            _emit(on_event, "reset")
+
+        metrics["playtest"] = pt
+        metrics["attempts"] = attempt + 1
+        metrics["agents"] = metrics.get("agents", 0) + 1  # the Playtester agent
+        metrics["parts"] = len(build.get("parts", []))
         return build, metrics
     finally:
         if own:

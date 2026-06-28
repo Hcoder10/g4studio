@@ -87,6 +87,9 @@ Output:
   what each object type DOES, scoring, timing, win/lose. Reference object keys by name.
   Be concrete enough that a programmer can implement it with no further questions.
 - `win`: the win/lose condition.
+- BOUNDED ARENA: include a "Wall" object type and place walls around the play-area perimeter so
+  the level reads as an enclosed level, not a flat empty plane. Pack objects DENSELY on the
+  surfaces — aim for a full, lively map, not a few scattered blocks.
 Coordinates in studs, Y up. Colors hex. Make it a real, playable game."""
 
 AREA_SYSTEM = """You are a BUILDER placing objects for ONE area of a Roblox map.
@@ -175,10 +178,13 @@ async def _scripter(client, design, on_event):
     return source, turns
 
 
-async def run_custom(prompt: str, client: CerebrasClient, on_event=None) -> tuple[dict, dict]:
+async def run_custom(prompt: str, client: CerebrasClient, on_event=None,
+                     feedback=None) -> tuple[dict, dict]:
     t0 = time.perf_counter()
     emit_ev(on_event, "director_started")
-    design, dturn = await client.structured(DESIGNER_SYSTEM, prompt, DESIGNER_SCHEMA,
+    designer_user = prompt if not feedback else \
+        prompt + "\n\nREDESIGN FEEDBACK (the playtester rejected your last attempt — fix these): " + feedback
+    design, dturn = await client.structured(DESIGNER_SYSTEM, designer_user, DESIGNER_SCHEMA,
                                             name="design", max_tokens=4000, temperature=0.6)
     turns = [dturn]
     name = design.get("name", "Custom Game")

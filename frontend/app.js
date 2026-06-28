@@ -113,6 +113,17 @@
         stagesBox.appendChild(card);
         break;
       }
+      case "redesign": {
+        const card = document.createElement("div");
+        card.className = "stage-card vision-card pop";
+        card.innerHTML = `<div class="vision-head">🔁 Playtester rejected (${ev.score}/10) — Designer redesigning with feedback…</div>`;
+        stagesBox.appendChild(card);
+        break;
+      }
+      case "reset":
+        agentsBox.innerHTML = ""; agentCount = 0; hudAgents.textContent = "0";
+        partsCount = 0; hudParts.textContent = "0";
+        break;
       case "done":
         running = false; cancelAnimationFrame(timerRAF); showResult(ev); el("go").disabled = false; break;
       case "error":

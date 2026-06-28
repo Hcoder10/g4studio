@@ -133,6 +133,10 @@ def to_plugin_event(e: dict) -> Optional[dict]:
                 "name": e.get("name"), "status": e.get("status"), "detail": e.get("detail")}
     if t == "stage":  # hub / ground / playtester-fix ops streamed by genres
         return {"type": "stage", "ops": e.get("ops") or []}
+    if t == "redesign":  # playtester sent it back to the designer
+        return {"type": "redesign", "score": e.get("score"), "attempt": e.get("attempt")}
+    if t == "reset":  # clear the world before the redesign round rebuilds
+        return {"type": "reset"}
     if t == "assembled":
         return {"type": "stage", "ops": _spawn_win_ops(e.get("spawn"), e.get("win"))}
     return None

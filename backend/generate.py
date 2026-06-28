@@ -48,15 +48,23 @@ def on_event(e: dict) -> None:
             with open(os.path.join(out_dir, "playtest.png"), "wb") as f:
                 f.write(base64.b64decode(img.split(",", 1)[1]))
             print(f"      (render saved -> out/playtest.png)")
+    elif t == "redesign":
+        print(f"  [LOOP] playtester rejected ({e.get('score')}/10) -> Designer redesigning "
+              f"(attempt {e.get('attempt')})")
     elif t == "assembled":
         print(f"  [assembled] {e.get('parts')} parts in {e.get('wall_ms')} ms")
 
 
 async def main() -> None:
-    prompt = " ".join(sys.argv[1:]) or "neon lava parkour with moving platforms and 2 checkpoints"
-    print(f"\nPrompt: {prompt}\n")
+    args = sys.argv[1:]
+    force_genre = None
+    if args and args[0].startswith("--genre="):
+        force_genre = args[0].split("=", 1)[1]
+        args = args[1:]
+    prompt = " ".join(args) or "neon lava parkour with moving platforms and 2 checkpoints"
+    print(f"\nPrompt: {prompt}" + (f"  [forced genre: {force_genre}]" if force_genre else "") + "\n")
     t0 = time.perf_counter()
-    build, metrics = await generate_game(prompt, on_event=on_event)
+    build, metrics = await generate_game(prompt, on_event=on_event, force_genre=force_genre)
     wall = (time.perf_counter() - t0) * 1000
 
     out_dir = os.path.join(os.path.dirname(__file__), "..", "out")
