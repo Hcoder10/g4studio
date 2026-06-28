@@ -145,14 +145,24 @@ end
 -- ============================ Building =====================================
 local buildRoot, buildFolders
 
-local function ensureRoot()
+local function ensureRoot(rootName)
+	rootName = rootName or "G4Game"
 	local ws = workspace
-	local old = ws:FindFirstChild("G4Obby"); if old then old:Destroy() end
-	buildRoot = Instance.new("Folder"); buildRoot.Name = "G4Obby"; buildRoot.Parent = ws
-	buildFolders = { _root = buildRoot }
-	for _, fn in ipairs({ "Platforms", "Hazards", "Checkpoints", "Moving", "Spinners", "Decor" }) do
-		local f = Instance.new("Folder"); f.Name = fn; f.Parent = buildRoot; buildFolders[fn] = f
+	for _, n in ipairs({ "G4Obby", "G4Game", rootName }) do
+		local o = ws:FindFirstChild(n); if o then o:Destroy() end
 	end
+	buildRoot = Instance.new("Folder"); buildRoot.Name = rootName; buildRoot.Parent = ws
+	buildFolders = { _root = buildRoot }
+end
+
+-- folders are created on demand so any genre's folder set works
+local function getFolder(name)
+	if name == nil or name == "_root" then return buildRoot end
+	local f = buildFolders[name]
+	if not f then
+		f = Instance.new("Folder"); f.Name = name; f.Parent = buildRoot; buildFolders[name] = f
+	end
+	return f
 end
 
 local function applyOps(ops)
@@ -167,14 +177,16 @@ local function applyOps(ops)
 			inst.CFrame = CFrame.new(p.pos[1], p.pos[2], p.pos[3])
 			inst.Color = Color3.fromRGB(p.color[1], p.color[2], p.color[3])
 			inst.Material = MAT[p.material] or Enum.Material.SmoothPlastic
-			inst.Parent = buildFolders[p.folder] or buildRoot
+			inst.Parent = getFolder(p.folder)
 		end)
 		if ok and i % 5 == 0 then task.wait() end
 	end
 end
 
 local function handleEvent(ev)
-	if ev.type == "agent" then
+	if ev.type == "genre" then
+		status.Text = "Genre: " .. tostring(ev.genre) .. " — building live…"
+	elseif ev.type == "agent" then
 		upsertAgent(ev.id, ev.name, ev.role)
 		if ev.status == "done" then
 			setDone(ev.id, ev.detail or ev.name, ev.id == "director")
@@ -232,7 +244,7 @@ local function build()
 		if not startData.job_id then status.Text = "No job id (" .. tostring(startData.error) .. ")"; done(); return end
 		local job = startData.job_id
 
-		ensureRoot()
+		ensureRoot(startData.root)
 		local recording = nil
 		pcall(function() recording = ChangeHistoryService:TryBeginRecording("G4 Studio build") end)
 

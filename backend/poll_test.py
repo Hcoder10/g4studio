@@ -1,6 +1,7 @@
 """Headless check of the plugin streaming path: /api/generate/start then /poll.
 Run with the server up:  python backend/poll_test.py
 """
+import sys
 import time
 from collections import Counter
 
@@ -10,8 +11,9 @@ BASE = "http://127.0.0.1:8000"
 
 
 def main() -> None:
-    r = requests.post(BASE + "/api/generate/start",
-                      json={"prompt": "neon lava parkour with spinning blades, moving platforms and 2 checkpoints"})
+    prompt = " ".join(sys.argv[1:]) or "neon lava parkour with spinning blades, moving platforms and 2 checkpoints"
+    print("prompt:", prompt)
+    r = requests.post(BASE + "/api/generate/start", json={"prompt": prompt})
     job = r.json().get("job_id")
     if not job:
         print("no job:", r.text); return

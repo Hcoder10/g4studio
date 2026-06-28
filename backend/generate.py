@@ -11,12 +11,14 @@ import time
 sys.path.insert(0, os.path.dirname(__file__))
 
 from g4studio.swarm import generate_game  # noqa: E402
-from g4studio.emit import to_rbxmx, to_luau  # noqa: E402
+from g4studio.emit import build_to_rbxmx, build_to_luau  # noqa: E402
 
 
 def on_event(e: dict) -> None:
     t = e.get("type")
-    if t == "director_started":
+    if t == "genre":
+        print(f"  [router] genre = {e.get('genre')}")
+    elif t == "director_started":
         print("  [director] designing the obby...")
     elif t == "director_done":
         print(f"  [director] '{e.get('name')}' - {e.get('stages')} stages "
@@ -36,7 +38,7 @@ async def main() -> None:
     prompt = " ".join(sys.argv[1:]) or "neon lava parkour with moving platforms and 2 checkpoints"
     print(f"\nPrompt: {prompt}\n")
     t0 = time.perf_counter()
-    spec, metrics = await generate_game(prompt, on_event=on_event)
+    build, metrics = await generate_game(prompt, on_event=on_event)
     wall = (time.perf_counter() - t0) * 1000
 
     out_dir = os.path.join(os.path.dirname(__file__), "..", "out")
@@ -44,16 +46,17 @@ async def main() -> None:
     rbxmx_path = os.path.join(out_dir, "g4obby.rbxmx")
     luau_path = os.path.join(out_dir, "g4obby_build.luau")
     with open(rbxmx_path, "w", encoding="utf-8") as f:
-        f.write(to_rbxmx(spec))
+        f.write(build_to_rbxmx(build))
     with open(luau_path, "w", encoding="utf-8") as f:
-        f.write(to_luau(spec))
+        f.write(build_to_luau(build))
 
     print("\n=== RESULT ===")
-    print(f"  {metrics['name']}: {metrics['parts']} parts "
-          f"(platforms={metrics['platforms']} hazards={metrics['hazards']} "
-          f"checkpoints={metrics['checkpoints']} moving={metrics['moving']})")
-    print(f"  {metrics['agents']} agents, {metrics['completion_tokens']} tokens, "
-          f"per-agent tok/s={metrics['agent_tps']}")
+    extra = " ".join(f"{k}={metrics[k]}" for k in
+                     ("platforms", "hazards", "checkpoints", "moving", "spinners", "decor",
+                      "zones", "orbs", "upgrades") if k in metrics)
+    print(f"  [{metrics.get('genre')}] {metrics.get('name')}: {metrics.get('parts')} parts  {extra}")
+    print(f"  {metrics.get('agents')} agents, {metrics.get('completion_tokens')} tokens, "
+          f"per-agent tok/s={metrics.get('agent_tps')}")
     print(f"  TOTAL WALL TIME: {wall:.0f} ms")
     print(f"  wrote {os.path.abspath(rbxmx_path)}")
     print(f"  wrote {os.path.abspath(luau_path)}")

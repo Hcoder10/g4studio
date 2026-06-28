@@ -16,6 +16,7 @@ from typing import Any, Callable, Optional
 
 from .cerebras import CerebrasClient, Turn
 from .ops import GameSpec, spec_from_dict
+from .genre_simulator import run_simulator
 
 # ---- schema fragments (strict-mode safe) ----------------------------------
 VEC3 = {
@@ -206,11 +207,9 @@ async def _run_builder(client: CerebrasClient, idx: int, stage: dict,
     return out, turn
 
 
-async def generate_game(prompt: str, client: Optional[CerebrasClient] = None,
-                        on_event: Optional[Callable] = None) -> tuple[GameSpec, dict]:
-    """Prompt -> playable GameSpec. Emits events for the UI; returns (spec, metrics)."""
-    own = client is None
-    client = client or CerebrasClient()
+async def run_obby(prompt: str, client: CerebrasClient,
+                   on_event: Optional[Callable] = None) -> tuple[dict, dict]:
+    """Obby genre: prompt -> generic build dict + metrics. Emits streaming events."""
     t0 = time.perf_counter()
     turns: list[Turn] = []
 
@@ -269,6 +268,7 @@ async def generate_game(prompt: str, client: Optional[CerebrasClient] = None,
     spec = spec_from_dict(combined)
     wall_ms = (time.perf_counter() - t0) * 1000.0
     metrics = {
+        "genre": "obby",
         "name": spec.name,
         "agents": 1 + len(stages),
         "wall_ms": round(wall_ms),
@@ -286,6 +286,53 @@ async def generate_game(prompt: str, client: Optional[CerebrasClient] = None,
     }
     _emit(on_event, "assembled", parts=spec.part_count(), wall_ms=round(wall_ms),
           spawn=metrics["spawn"], win=metrics["win"])
-    if own:
-        await client.aclose()
-    return spec, metrics
+    from .emit import to_build
+    build = to_build(spec)
+    build["root"] = "G4Game"
+    build["name"] = spec.name
+    return build, metrics
+
+
+# ---- genre routing ---------------------------------------------------------
+GENRE_SCHEMA = {
+    "type": "object", "additionalProperties": False,
+    "properties": {
+        "genre": {"type": "string", "enum": ["obby", "simulator"]},
+        "reason": {"type": "string"},
+    },
+    "required": ["genre", "reason"],
+}
+
+CLASSIFY_SYSTEM = """Classify the Roblox game the user wants into ONE genre:
+- "obby": an obstacle course / parkour — jumping across platforms, avoiding lava/hazards,
+  reaching a finish (keywords: obby, parkour, jump, tower, climb, course, avoid, lava).
+- "simulator": walk around collecting things to earn currency and buy upgrades
+  (keywords: simulator, collect, gather, farm, coins, pets, upgrade, grind, tycoon, money).
+Pick the closest. If genuinely unclear, choose "obby"."""
+
+
+async def classify_genre(client: CerebrasClient, prompt: str) -> str:
+    try:
+        out, _ = await client.structured(CLASSIFY_SYSTEM, prompt, GENRE_SCHEMA,
+                                         name="genre", max_tokens=150, temperature=0.1)
+        g = out.get("genre", "obby")
+        return g if g in ("obby", "simulator") else "obby"
+    except Exception:
+        return "obby"
+
+
+async def generate_game(prompt: str, client: Optional[CerebrasClient] = None,
+                        on_event: Optional[Callable] = None) -> tuple[dict, dict]:
+    """Classify the prompt's genre, then run that genre's pipeline.
+    Returns (build_dict, metrics)."""
+    own = client is None
+    client = client or CerebrasClient()
+    try:
+        genre = await classify_genre(client, prompt)
+        _emit(on_event, "genre", genre=genre)
+        if genre == "simulator":
+            return await run_simulator(prompt, client, on_event)
+        return await run_obby(prompt, client, on_event)
+    finally:
+        if own:
+            await client.aclose()

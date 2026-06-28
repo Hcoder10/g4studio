@@ -14,9 +14,8 @@ from fastapi.staticfiles import StaticFiles
 sys.path.insert(0, os.path.dirname(__file__))
 
 from g4studio.swarm import generate_game  # noqa: E402
-from g4studio.emit import to_rbxmx, to_luau, to_build  # noqa: E402
+from g4studio.emit import build_to_rbxmx, build_to_luau  # noqa: E402
 from g4studio.emit.plugin_ops import to_plugin_event  # noqa: E402
-from g4studio.mechanics import get_mechanics_luau  # noqa: E402
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 FRONTEND = os.path.join(REPO, "frontend")
@@ -42,12 +41,12 @@ async def api_generate(req: Request):
     prompt = (body.get("prompt") or "").strip()
     if not prompt:
         return {"error": "empty prompt"}
-    spec, metrics = await generate_game(prompt)
+    build, metrics = await generate_game(prompt)
     return {
-        "name": spec.name,
+        "name": build.get("name"),
         "metrics": metrics,
-        "build": to_build(spec),
-        "rbxmx": to_rbxmx(spec),
+        "build": build,
+        "rbxmx": build_to_rbxmx(build),
     }
 
 
@@ -75,10 +74,15 @@ async def gen_start(req: Request):
 
     async def run() -> None:
         try:
-            spec, metrics = await generate_game(prompt, on_event=on_event)
+            build, metrics = await generate_game(prompt, on_event=on_event)
+            mech = ""
+            for s in build.get("scripts", []):
+                if s.get("name") == "G4Mechanics":
+                    mech = s.get("source", "")
+                    break
             job["events"].append({
-                "type": "done", "name": spec.name, "metrics": metrics,
-                "mechanics": get_mechanics_luau(), "rbxmx": to_rbxmx(spec),
+                "type": "done", "name": build.get("name"), "metrics": metrics,
+                "mechanics": mech, "rbxmx": build_to_rbxmx(build),
             })
         except Exception as ex:
             job["events"].append({"type": "error", "error": str(ex)[:300]})
@@ -90,7 +94,7 @@ async def gen_start(req: Request):
     if len(JOBS) > 64:
         for k in [k for k, v in list(JOBS.items())[:32] if v.get("done")]:
             JOBS.pop(k, None)
-    return {"job_id": job_id}
+    return {"job_id": job_id, "root": "G4Game"}
 
 
 @app.get("/api/generate/poll")
@@ -120,12 +124,12 @@ async def ws_generate(ws: WebSocket):
 
         async def run() -> None:
             try:
-                spec, metrics = await generate_game(prompt, on_event=on_event)
+                build, metrics = await generate_game(prompt, on_event=on_event)
                 queue.put_nowait({
                     "type": "done",
                     "metrics": metrics,
-                    "rbxmx": to_rbxmx(spec),
-                    "luau": to_luau(spec),
+                    "rbxmx": build_to_rbxmx(build),
+                    "luau": build_to_luau(build),
                 })
             except Exception as ex:  # surface to the UI rather than dropping the socket
                 queue.put_nowait({"type": "error", "error": str(ex)[:300]})

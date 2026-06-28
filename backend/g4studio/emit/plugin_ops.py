@@ -107,6 +107,8 @@ def _spawn_win_ops(spawn, win) -> list:
 def to_plugin_event(e: dict) -> Optional[dict]:
     """Map a raw swarm event to a plugin-friendly streaming event (or None)."""
     t = e.get("type")
+    if t == "genre":
+        return {"type": "genre", "genre": e.get("genre")}
     if t == "director_started":
         return {"type": "agent", "id": "director", "role": "Director", "name": "Director", "status": "working"}
     if t == "director_done":
@@ -120,9 +122,12 @@ def to_plugin_event(e: dict) -> Optional[dict]:
         sid = e.get("stage", 0)
         c = e.get("counts", {}) or {}
         parts = sum(int(v) for v in c.values())
+        ops = e.get("ops")
+        if ops is None:  # obby still streams raw elements; other genres pre-convert
+            ops = stage_ops(e.get("elements") or {}, sid)
         return {"type": "agent_build", "id": f"b{sid}", "status": "done",
                 "detail": f"{parts} parts · {e.get('tps')} tok/s · {e.get('ms')} ms",
-                "ops": stage_ops(e.get("elements") or {}, sid)}
+                "ops": ops}
     if t == "assembled":
         return {"type": "stage", "ops": _spawn_win_ops(e.get("spawn"), e.get("win"))}
     return None
