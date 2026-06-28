@@ -26,6 +26,8 @@ gameplay. You decide everything — there are no templates.
 Start with a comment:  -- TITLE: <a short catchy game name>
 
 WORLD (build it procedurally, with helper functions + loops/math so it's coherent and lively):
+- FIRST, clear any previous build so re-running is clean:
+  `local old = workspace:FindFirstChild("G4Game"); if old then old:Destroy() end`
 - Make helpers for repeated props from PRIMITIVES, e.g. makeTree(x,z), makeRock(x,z), using Parts
   with .Shape (Enum.PartType.Ball/Cylinder/Block) or WedgePart, .Material, .Color=Color3.fromRGB,
   .Anchored=true, and PointLight for glows. Group props in a Model.
@@ -114,45 +116,9 @@ async def run_authored(prompt: str, client: CerebrasClient, on_event=None,
         emit_ev(on_event, "agent", id="validator", status="done",
                 detail=f"fixed {len(issues)} API error(s)")
     fixed = _force_fix(fixed)
-
-    # --- vision feedback (best-effort): run the world in a Luau sandbox, render it,
-    # let Gemma-4 SEE its own level and revise the CODE. Never blocks the build. ---
-    try:
-        from .sandbox import run_world
-        from .render import render_data_uri
-        from .playtester import PLAYTEST_OPEN
-        preview, _serr = run_world(fixed)
-        if len(preview.get("parts", [])) >= 8:
-            emit_ev(on_event, "agent", id="playtester", role="QA", name="Playtester", status="working")
-            data_uri = render_data_uri(preview)
-            crit, vt = await client.vision_json(
-                PLAYTEST_OPEN,
-                "This is a top-down + side render of an auto-generated Roblox game. Grade it. Output only JSON.",
-                data_uri, max_tokens=1200)
-            turns.append(vt)
-            try:
-                score = int(crit.get("score", 7))
-            except (TypeError, ValueError):
-                score = 7
-            vissues = [str(x) for x in (crit.get("issues") or [])][:4]
-            verdict = str(crit.get("verdict", ""))
-            emit_ev(on_event, "playtest", image=data_uri, score=score, issues=vissues, verdict=verdict, fixes=0)
-            emit_ev(on_event, "agent", id="playtester", status="done", detail=f"score {score}/10")
-            if score < 6:
-                emit_ev(on_event, "agent", id="reviser", role="Coder", name="Reviser", status="working")
-                rv = await client.chat(
-                    [{"role": "system", "content": REVISE_SYSTEM},
-                     {"role": "user", "content":
-                      f"A playtester scored your level {score}/10. Issues: {'; '.join(vissues)}. "
-                      f"Verdict: {verdict}. Improve the WORLD-BUILDING to fix this, keep the gameplay. "
-                      f"SCRIPT:\n{fixed}"}], max_tokens=14000, temperature=0.5)
-                turns.append(rv)
-                revised = _strip_fences(rv.text)
-                if len(revised) > 200:
-                    fixed = _force_fix(revised)
-                emit_ev(on_event, "agent", id="reviser", status="done", detail="revised the world")
-    except Exception:
-        pass
+    # NOTE: the vision-feedback loop now runs in REAL Roblox Studio (plugin builds the
+    # world in edit mode; server screenshots Studio via /api/vision -> Gemma grades ->
+    # the model revises). See server.api_vision + the plugin.
 
     title = "G4 Game"
     m = re.search(r"--\s*TITLE:\s*(.+)", fixed)

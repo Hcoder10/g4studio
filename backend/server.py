@@ -16,6 +16,10 @@ sys.path.insert(0, os.path.dirname(__file__))
 from g4studio.swarm import generate_game  # noqa: E402
 from g4studio.emit import build_to_rbxmx, build_to_luau  # noqa: E402
 from g4studio.emit.plugin_ops import to_plugin_event  # noqa: E402
+from g4studio.cerebras import CerebrasClient  # noqa: E402
+from g4studio.capture import capture_data_uri  # noqa: E402
+from g4studio.playtester import PLAYTEST_OPEN  # noqa: E402
+from g4studio.authored import REVISE_SYSTEM, _strip_fences, _force_fix  # noqa: E402
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 FRONTEND = os.path.join(REPO, "frontend")
@@ -31,6 +35,45 @@ async def index():
 @app.get("/health")
 async def health():
     return {"ok": True}
+
+
+@app.post("/api/vision")
+async def api_vision(req: Request):
+    """Screenshot the REAL Roblox Studio window, have Gemma-4 grade the engine render,
+    and (if weak) return a revised script for the plugin to rebuild. No sandbox."""
+    body = await req.json()
+    script = body.get("script") or ""
+    attempt = int(body.get("attempt", 0))
+    data_uri = capture_data_uri()
+    if not data_uri:
+        return {"error": "Roblox Studio window not found or not visible"}
+    client = CerebrasClient()
+    try:
+        crit, _vt = await client.vision_json(
+            PLAYTEST_OPEN,
+            "This is a screenshot of an auto-generated Roblox game built in Studio. Grade it. Output only JSON.",
+            data_uri, max_tokens=1200)
+        try:
+            score = int(crit.get("score", 7))
+        except (TypeError, ValueError):
+            score = 7
+        issues = [str(x) for x in (crit.get("issues") or [])][:4]
+        verdict = str(crit.get("verdict", ""))
+        out = {"score": score, "issues": issues, "verdict": verdict}
+        if score < 6 and attempt < 2 and len(script) > 100:
+            rv = await client.chat(
+                [{"role": "system", "content": REVISE_SYSTEM},
+                 {"role": "user", "content":
+                  f"A playtester looked at your game running in Studio and scored it {score}/10. "
+                  f"Issues: {'; '.join(issues)}. Verdict: {verdict}. Improve the WORLD-BUILDING "
+                  f"(layout, density, structure, decoration) to fix this — keep the gameplay. SCRIPT:\n{script}"}],
+                max_tokens=14000, temperature=0.5)
+            revised = _strip_fences(rv.text or "")
+            if len(revised) > 200:
+                out["revised_script"] = _force_fix(revised)
+        return out
+    finally:
+        await client.aclose()
 
 
 @app.post("/api/generate")

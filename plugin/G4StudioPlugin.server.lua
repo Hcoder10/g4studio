@@ -199,6 +199,83 @@ local function applyOps(ops)
 	end
 end
 
+-- ===== Authored games: build in REAL Studio + vision loop =====
+local function insertToSSS(src)
+	local SSS = game:GetService("ServerScriptService")
+	local old = SSS:FindFirstChild("G4GameScript"); if old then old:Destroy() end
+	local sc = Instance.new("Script"); sc.Name = "G4GameScript"; sc.Source = src; sc.Parent = SSS
+end
+
+local function buildInStudio(src)
+	if not loadstring then return false, "loadstring unavailable" end
+	local old = workspace:FindFirstChild("G4Game"); if old then old:Destroy() end
+	local fn, lerr = loadstring(src)
+	if not fn then return false, "compile: " .. tostring(lerr) end
+	local ok, rerr = pcall(fn)
+	if not ok then return false, "runtime: " .. tostring(rerr) end
+	return true
+end
+
+local function frameCamera()
+	local root = workspace:FindFirstChild("G4Game")
+	if not root then return end
+	local minv, maxv
+	for _, d in ipairs(root:GetDescendants()) do
+		if d:IsA("BasePart") then
+			local p = d.Position
+			if not minv then minv = p; maxv = p
+			else
+				minv = Vector3.new(math.min(minv.X, p.X), math.min(minv.Y, p.Y), math.min(minv.Z, p.Z))
+				maxv = Vector3.new(math.max(maxv.X, p.X), math.max(maxv.Y, p.Y), math.max(maxv.Z, p.Z))
+			end
+		end
+	end
+	if not minv then return end
+	local center = (minv + maxv) / 2
+	local dist = math.max((maxv - minv).Magnitude * 0.65, 45)
+	local cam = workspace.CurrentCamera
+	if cam then
+		pcall(function()
+			cam.CFrame = CFrame.lookAt(center + Vector3.new(0, dist * 0.95, dist * 0.95), center)
+		end)
+	end
+end
+
+local function runStudioVision(src)
+	task.spawn(function()
+		local current = src
+		for attempt = 0, 2 do
+			task.wait(0.6)
+			local ok, res = pcall(function()
+				return HttpService:RequestAsync({
+					Url = serverUrl() .. "/api/vision", Method = "POST",
+					Headers = { ["Content-Type"] = "application/json" },
+					Body = HttpService:JSONEncode({ script = current, attempt = attempt }),
+				})
+			end)
+			if not ok or not res.Success then break end
+			local data = HttpService:JSONDecode(res.Body)
+			if data.error then status.Text = "Playtester: " .. tostring(data.error); break end
+			upsertAgent("playtester", "Playtester", "QA")
+			setDone("playtester", "Studio render " .. tostring(data.score) .. "/10")
+			status.Text = string.format("Playtester (Studio): %s/10 — %s",
+				tostring(data.score), tostring(data.verdict or ""))
+			if data.revised_script and #data.revised_script > 100 then
+				upsertAgent("reviser", "Reviser", "Coder"); setWorking("reviser")
+				current = data.revised_script
+				local b2 = buildInStudio(current)
+				setDone("reviser", "rebuilt the world")
+				if not b2 then break end
+				frameCamera()
+			else
+				break
+			end
+		end
+		insertToSSS(current)
+		status.Text = "✅ Built + playtested in Studio. Press PLAY to play it."
+	end)
+end
+
 local function handleEvent(ev)
 	if ev.type == "genre" then
 		status.Text = "Genre: " .. tostring(ev.genre) .. " — building live…"
@@ -221,13 +298,16 @@ local function handleEvent(ev)
 	elseif ev.type == "done" then
 		local m = ev.metrics or {}
 		if ev.authored and ev.script then
-			-- the model authored the whole game as one Script; insert it, build on Play
-			local SSS = game:GetService("ServerScriptService")
-			local oldS = SSS:FindFirstChild("G4GameScript"); if oldS then oldS:Destroy() end
-			local emptyWorld = workspace:FindFirstChild("G4Game"); if emptyWorld then emptyWorld:Destroy() end
-			local sc = Instance.new("Script"); sc.Name = "G4GameScript"; sc.Source = ev.script; sc.Parent = SSS
-			status.Text = string.format("✅ '%s' authored — %d lines, %d agents. Press PLAY to build & play.",
-				tostring(ev.name or "game"), tonumber(m.lines) or 0, tonumber(m.agents) or 0)
+			-- build the world in REAL Studio (edit mode), then the vision loop screenshots it
+			status.Text = "Building '" .. tostring(ev.name or "game") .. "' in Studio…"
+			local built, berr = buildInStudio(ev.script)
+			if built then
+				frameCamera()
+				runStudioVision(ev.script)
+			else
+				insertToSSS(ev.script)
+				status.Text = "Built (live preview off: " .. tostring(berr) .. "). Press PLAY."
+			end
 		else
 			if ev.mechanics and buildRoot then
 				local sc = Instance.new("Script"); sc.Name = "G4Mechanics"
