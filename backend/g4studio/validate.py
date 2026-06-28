@@ -19,6 +19,9 @@ MATERIALS = {
     "CorrodedMetal", "DiamondPlate", "Foil", "Glass", "ForceField", "Air", "Water",
 }
 PART_TYPES = {"Ball", "Block", "Cylinder", "Wedge", "CornerWedge"}
+EASING_STYLES = {"Linear", "Sine", "Back", "Quad", "Quart", "Quint", "Bounce",
+                 "Elastic", "Exponential", "Circular", "Cubic"}
+EASING_DIRS = {"In", "Out", "InOut"}
 
 # common hallucination -> suggestion
 _SUGGEST = {
@@ -43,4 +46,10 @@ def find_api_issues(src: str) -> list[str]:
         name = m.group(1)
         if name not in PART_TYPES:
             issues.append(f"Enum.PartType.{name} is INVALID (only Ball/Block/Cylinder/Wedge/CornerWedge)")
+    for m in re.finditer(r"Enum\.EasingStyle\.(\w+)", src):
+        if m.group(1) not in EASING_STYLES:
+            issues.append(f"Enum.EasingStyle.{m.group(1)} is INVALID")
+    for m in re.finditer(r"Enum\.EasingDirection\.(\w+)", src):
+        if m.group(1) not in EASING_DIRS:
+            issues.append(f"Enum.EasingDirection.{m.group(1)} is INVALID (only In/Out/InOut)")
     return sorted(set(issues))
