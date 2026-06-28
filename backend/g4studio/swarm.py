@@ -325,19 +325,29 @@ async def classify_genre(client: CerebrasClient, prompt: str) -> str:
 
 
 async def generate_game(prompt: str, client: Optional[CerebrasClient] = None,
-                        on_event: Optional[Callable] = None) -> tuple[dict, dict]:
-    """Classify the prompt's genre, then run that genre's pipeline.
-    Returns (build_dict, metrics)."""
+                        on_event: Optional[Callable] = None,
+                        playtest: bool = True) -> tuple[dict, dict]:
+    """Classify the prompt's genre, run that genre's pipeline, then have the vision
+    Playtester grade + fix it. Returns (build_dict, metrics)."""
     own = client is None
     client = client or CerebrasClient()
     try:
         genre = await classify_genre(client, prompt)
         _emit(on_event, "genre", genre=genre)
         if genre == "simulator":
-            return await run_simulator(prompt, client, on_event)
-        if genre == "custom":
-            return await run_custom(prompt, client, on_event)
-        return await run_obby(prompt, client, on_event)
+            build, metrics = await run_simulator(prompt, client, on_event)
+        elif genre == "custom":
+            build, metrics = await run_custom(prompt, client, on_event)
+        else:
+            build, metrics = await run_obby(prompt, client, on_event)
+
+        if playtest:
+            from .playtester import run_playtest
+            build, pt = await run_playtest(client, build, genre, metrics.get("name", "game"), on_event)
+            metrics["playtest"] = pt
+            metrics["agents"] = metrics.get("agents", 0) + 1  # the Playtester agent
+            metrics["parts"] = len(build.get("parts", []))    # fixes may add parts
+        return build, metrics
     finally:
         if own:
             await client.aclose()

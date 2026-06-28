@@ -83,6 +83,15 @@ body {
 .chip2.moving { color: var(--blue); border-color: rgba(74,163,255,0.4); }
 .stage-meta { font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
 
+/* Playtester vision card */
+.vision-card { grid-column: 1 / -1; border-left-color: var(--blue); }
+.vision-head { font-weight: 700; font-size: 14px; margin-bottom: 8px; }
+.vision-head b { color: var(--teal); font-size: 16px; }
+.vision-img { width: 100%; border-radius: 8px; border: 1px solid var(--line); display: block; background: #0a0e14; }
+.vision-verdict { color: var(--text); font-size: 13px; margin-top: 8px; font-style: italic; }
+.vision-issues { margin: 8px 0 0; padding-left: 18px; color: var(--muted); font-size: 12px; }
+.vision-issues li { margin: 2px 0; }
+
 /* HUD */
 .hud { position: absolute; top: 14px; left: 14px; display: flex; gap: 10px; pointer-events: none; }
 .hud-item {

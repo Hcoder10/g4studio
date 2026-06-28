@@ -97,6 +97,22 @@
       }
       case "builder_error":
         finishAgentCard("b" + ev.stage, `error`); break;
+      case "agent":
+        if (ev.status === "done") finishAgentCard(ev.id, ev.detail || "done");
+        else addAgentCard(ev.id, ev.name || ev.id, ev.role || "agent");
+        break;
+      case "playtest": {
+        const card = document.createElement("div");
+        card.className = "stage-card vision-card pop";
+        const issues = (ev.issues || []).map((i) => `<li>${i}</li>`).join("");
+        card.innerHTML =
+          `<div class="vision-head">👁 Playtester saw the level — <b>${ev.score}/10</b> · ${ev.fixes} auto-fixes</div>` +
+          `<img class="vision-img" src="${ev.image}" alt="playtester view" />` +
+          `<div class="vision-verdict">${ev.verdict || ""}</div>` +
+          (issues ? `<ul class="vision-issues">${issues}</ul>` : "");
+        stagesBox.appendChild(card);
+        break;
+      }
       case "done":
         running = false; cancelAnimationFrame(timerRAF); showResult(ev); el("go").disabled = false; break;
       case "error":

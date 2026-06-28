@@ -30,6 +30,24 @@ def on_event(e: dict) -> None:
         print(f"  [builder {e.get('stage')}] done: {c}  ({e.get('tps')} tok/s, {e.get('ms')} ms)")
     elif t == "builder_error":
         print(f"  [builder {e.get('stage')}] ERROR: {e.get('error')}")
+    elif t == "agent":
+        if e.get("status") == "done":
+            print(f"  [{e.get('id')}] {e.get('detail', 'done')}")
+        else:
+            print(f"  [{e.get('id')}] working...")
+    elif t == "playtest":
+        print(f"  [playtester] VISION score {e.get('score')}/10 · fixes {e.get('fixes')} · "
+              f"verdict: {e.get('verdict')}")
+        for iss in e.get("issues", []):
+            print(f"      - {iss}")
+        img = e.get("image", "")
+        if img.startswith("data:image"):
+            import base64
+            out_dir = os.path.join(os.path.dirname(__file__), "..", "out")
+            os.makedirs(out_dir, exist_ok=True)
+            with open(os.path.join(out_dir, "playtest.png"), "wb") as f:
+                f.write(base64.b64decode(img.split(",", 1)[1]))
+            print(f"      (render saved -> out/playtest.png)")
     elif t == "assembled":
         print(f"  [assembled] {e.get('parts')} parts in {e.get('wall_ms')} ms")
 

@@ -128,6 +128,11 @@ def to_plugin_event(e: dict) -> Optional[dict]:
         return {"type": "agent_build", "id": f"b{sid}", "status": "done",
                 "detail": f"{parts} parts · {e.get('tps')} tok/s · {e.get('ms')} ms",
                 "ops": ops}
+    if t == "agent":  # scripter / playtester cards (already plugin-shaped)
+        return {"type": "agent", "id": e.get("id"), "role": e.get("role"),
+                "name": e.get("name"), "status": e.get("status"), "detail": e.get("detail")}
+    if t == "stage":  # hub / ground / playtester-fix ops streamed by genres
+        return {"type": "stage", "ops": e.get("ops") or []}
     if t == "assembled":
         return {"type": "stage", "ops": _spawn_win_ops(e.get("spawn"), e.get("win"))}
     return None

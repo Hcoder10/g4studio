@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import time
 from dataclasses import dataclass, field
 from typing import Any, Optional
@@ -170,6 +171,23 @@ class CerebrasClient:
             return json.loads(turn.text or "{}"), turn
         except json.JSONDecodeError:
             return {}, turn
+
+    async def vision_json(self, system: str, user_text: str, data_uri: str,
+                          max_tokens: int = 1800, temperature: float = 0.3) -> tuple[dict, Turn]:
+        """Vision call that returns parsed JSON (lenient extraction). Cerebras vision
+        emits text; we ask for JSON and extract the first {...} object."""
+        messages = [{"role": "system", "content": system},
+                    self.image_message(user_text, data_uri)]
+        turn = await self.chat(messages, max_tokens=max_tokens, temperature=temperature)
+        txt = turn.text or ""
+        data: dict = {}
+        m = re.search(r"\{.*\}", txt, re.S)
+        if m:
+            try:
+                data = json.loads(m.group(0))
+            except json.JSONDecodeError:
+                data = {}
+        return data, turn
 
     @staticmethod
     def image_message(text: str, data_uri: str, role: str = "user") -> dict:
