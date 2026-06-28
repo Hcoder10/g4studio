@@ -188,10 +188,24 @@ async def generate_game(prompt: str, client: Optional[CerebrasClient] = None,
         "Design the obby now. At least 4 distinct stages, one continuous path, and honor "
         "every specific thing the player asked for (mechanics, moving platforms, checkpoints)."
     )
+    MIN_STAGES = 4
     spec_json, dturn = await client.structured(
-        DIRECTOR_SYSTEM, director_user, DIRECTOR_SCHEMA, name="game_spec", max_tokens=4000)
+        DIRECTOR_SYSTEM, director_user, DIRECTOR_SCHEMA, name="game_spec",
+        max_tokens=4000, temperature=0.45)
     turns.append(dturn)
     stages = spec_json.get("stages") or []
+    # The min-stage rule isn't always followed; a retry is ~400ms on Cerebras.
+    retries = 0
+    while len(stages) < MIN_STAGES and retries < 2:
+        retries += 1
+        nudge = director_user + (
+            f"\n\nYour previous draft had only {len(stages)} stage(s) — REJECTED. Output at "
+            "least 4 distinct stages with a continuous connected path. Try again.")
+        spec_json, dturn = await client.structured(
+            DIRECTOR_SYSTEM, nudge, DIRECTOR_SCHEMA, name="game_spec",
+            max_tokens=4000, temperature=0.5)
+        turns.append(dturn)
+        stages = spec_json.get("stages") or []
     palette = [c for c in (spec_json.get("palette") or []) if isinstance(c, str)] or ["#9aa0a6"]
     difficulty = spec_json.get("difficulty", "medium")
     _emit(on_event, "director_done", name=spec_json.get("name"), theme=spec_json.get("theme"),
@@ -232,8 +246,11 @@ async def generate_game(prompt: str, client: Optional[CerebrasClient] = None,
         "hazards": len(spec.hazards),
         "checkpoints": len(spec.checkpoints),
         "moving": len(spec.moving),
+        "spawn": combined.get("spawn", {}).get("pos"),
+        "win": combined.get("win", {}).get("pos"),
     }
-    _emit(on_event, "assembled", parts=spec.part_count(), wall_ms=round(wall_ms))
+    _emit(on_event, "assembled", parts=spec.part_count(), wall_ms=round(wall_ms),
+          spawn=metrics["spawn"], win=metrics["win"])
     if own:
         await client.aclose()
     return spec, metrics

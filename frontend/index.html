@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>G4 Studio — Roblox games at the speed of thought</title>
+  <link rel="stylesheet" href="/static/style.css" />
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="logo">G4<span class="logo-dot">.</span>STUDIO</span>
+      <span class="tagline">Roblox games at the speed of thought</span>
+    </div>
+    <div class="powered">
+      <span class="chip chip-gemma">Gemma&nbsp;4&nbsp;31B</span>
+      <span class="chip chip-cb">on Cerebras</span>
+    </div>
+  </header>
+
+  <section class="promptbar">
+    <input id="prompt" type="text" autocomplete="off"
+      value="neon lava parkour with moving platforms and 2 checkpoints"
+      placeholder="Describe an obby… e.g. 'icy mountain climb with spinning blades'" />
+    <button id="go">Build&nbsp;⚡</button>
+  </section>
+  <div class="examples" id="examples"></div>
+
+  <main class="stage">
+    <div class="viewport">
+      <div id="canvas-wrap"></div>
+      <div class="hud">
+        <div class="hud-item"><span class="hud-val" id="hud-time">0</span><span class="hud-unit">ms</span><span class="hud-lbl">build time</span></div>
+        <div class="hud-item"><span class="hud-val" id="hud-tps">0</span><span class="hud-unit">tok/s</span><span class="hud-lbl">throughput</span></div>
+        <div class="hud-item"><span class="hud-val" id="hud-parts">0</span><span class="hud-unit">parts</span><span class="hud-lbl">built</span></div>
+        <div class="hud-item"><span class="hud-val" id="hud-agents">0</span><span class="hud-unit">agents</span><span class="hud-lbl">swarm</span></div>
+      </div>
+      <div class="result-card hidden" id="result">
+        <div class="result-title" id="result-title">—</div>
+        <div class="result-sub" id="result-sub"></div>
+        <div class="result-actions">
+          <a id="dl-rbxmx" class="btn-dl" download="g4obby.rbxmx">⬇ Download .rbxmx</a>
+          <span class="hint">Studio → right-click Workspace → Insert From File → Play</span>
+        </div>
+      </div>
+    </div>
+
+    <aside class="swarm">
+      <div class="swarm-head">SWARM</div>
+      <div id="agents" class="agents"></div>
+      <div class="swarm-foot">
+        <div class="metric"><span id="m-tokens">0</span> tokens</div>
+        <div class="metric"><span id="m-stages">0</span> stages</div>
+      </div>
+    </aside>
+  </main>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>

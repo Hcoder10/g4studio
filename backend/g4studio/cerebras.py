@@ -91,11 +91,12 @@ class CerebrasClient:
             raise RuntimeError(f"Cerebras {r.status_code}: {r.text[:400]}")
         return r.json(), dt_ms
 
-    def _base_body(self, messages: list, max_tokens: Optional[int]) -> dict:
+    def _base_body(self, messages: list, max_tokens: Optional[int],
+                   temperature: Optional[float] = None) -> dict:
         body: dict[str, Any] = {
             "model": self.model,
             "messages": messages,
-            "temperature": self.temperature,
+            "temperature": self.temperature if temperature is None else temperature,
             "max_tokens": max_tokens or self.max_tokens,
         }
         if self.reasoning_effort and self.reasoning_effort != "none":
@@ -103,8 +104,9 @@ class CerebrasClient:
         return body
 
     async def chat(self, messages: list, tools: Optional[list] = None,
-                   tool_choice: str = "auto", max_tokens: Optional[int] = None) -> Turn:
-        body = self._base_body(messages, max_tokens)
+                   tool_choice: Any = "auto", max_tokens: Optional[int] = None,
+                   temperature: Optional[float] = None) -> Turn:
+        body = self._base_body(messages, max_tokens, temperature)
         if tools:
             body["tools"] = tools
             body["tool_choice"] = tool_choice
@@ -142,7 +144,8 @@ class CerebrasClient:
         return parsed, turn
 
     async def structured(self, system: str, user: str, schema: dict,
-                         name: str = "result", max_tokens: Optional[int] = None) -> tuple[dict, Turn]:
+                         name: str = "result", max_tokens: Optional[int] = None,
+                         temperature: Optional[float] = None) -> tuple[dict, Turn]:
         """Structured output via a forced tool call — the confirmed-reliable path on
         Cerebras (strict schemas must avoid minItems/maxItems). Returns (args, turn)."""
         tools = [{
@@ -159,7 +162,7 @@ class CerebrasClient:
         turn = await self.chat(
             messages, tools=tools,
             tool_choice={"type": "function", "function": {"name": name}},
-            max_tokens=max_tokens,
+            max_tokens=max_tokens, temperature=temperature,
         )
         if turn.tool_calls:
             return turn.tool_calls[0]["args"], turn
