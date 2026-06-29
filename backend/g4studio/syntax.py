@@ -10,6 +10,7 @@ import io
 import os
 import re
 import subprocess
+import sys
 import tempfile
 import urllib.request
 import zipfile
@@ -20,8 +21,11 @@ from .authored import _force_fix, _strip_fences
 from .genre_common import emit_ev, post_channel
 
 _BIN_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "bin")
-_EXE = os.path.join(_BIN_DIR, "luau-compile.exe")
-_URL = "https://github.com/luau-lang/luau/releases/latest/download/luau-windows.zip"
+_IS_WIN = sys.platform.startswith("win")
+_NAME = "luau-compile.exe" if _IS_WIN else "luau-compile"
+_EXE = os.path.join(_BIN_DIR, _NAME)
+_ZIP = "luau-windows.zip" if _IS_WIN else "luau-ubuntu.zip"
+_URL = f"https://github.com/luau-lang/luau/releases/latest/download/{_ZIP}"
 _resolved: Optional[str] = None
 
 
@@ -36,15 +40,17 @@ def _ensure() -> Optional[str]:
     if found:
         _resolved = found
         return _resolved
-    try:  # self-bootstrap on Windows
+    try:  # self-bootstrap from the matching Luau release zip (Windows or Linux)
         os.makedirs(_BIN_DIR, exist_ok=True)
-        data = urllib.request.urlopen(_URL, timeout=60).read()
+        data = urllib.request.urlopen(_URL, timeout=90).read()
         with zipfile.ZipFile(io.BytesIO(data)) as z:
             for n in z.namelist():
-                if n.endswith("luau-compile.exe"):
+                if os.path.basename(n) == _NAME:
                     with z.open(n) as src, open(_EXE, "wb") as dst:
                         dst.write(src.read())
         if os.path.exists(_EXE):
+            if not _IS_WIN:
+                os.chmod(_EXE, 0o755)
             _resolved = _EXE
             return _resolved
     except Exception:

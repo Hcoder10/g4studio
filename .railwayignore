@@ -1,0 +1,12 @@
+# ship only the backend serving code to Railway
+.git/
+video/
+lerobot_datasets/
+site/
+out/
+*.stl
+*.mp4
+*.rbxmx
+**/__pycache__/
+backend/bin/*.exe
+datasets/*.jsonl

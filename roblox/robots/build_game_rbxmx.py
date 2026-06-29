@@ -12,7 +12,7 @@ import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 OUT = os.path.join(HERE, "..", "..", "out", "G4RobotGame.rbxmx")
-SERVER_URL = "http://127.0.0.1:8000"
+SERVER_URL = "https://g4studio-backend-production.up.railway.app"
 
 
 def _read(name):

@@ -7,26 +7,32 @@ calling a missing ctx method, etc.) so broken games never ship.
 import io
 import os
 import subprocess
+import sys
 import tempfile
 import zipfile
 from urllib.request import urlopen
 
-_BIN = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "bin", "luau.exe")
-_URL = "https://github.com/luau-lang/luau/releases/latest/download/luau-windows.zip"
+_IS_WIN = sys.platform.startswith("win")
+_NAME = "luau.exe" if _IS_WIN else "luau"
+_BIN = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "bin", _NAME)
+_ZIP = "luau-windows.zip" if _IS_WIN else "luau-ubuntu.zip"
+_URL = f"https://github.com/luau-lang/luau/releases/latest/download/{_ZIP}"
 
 
 def _ensure_luau() -> bool:
-    """Self-bootstrap the Luau runtime (same release as the vendored luau-compile)."""
+    """Self-bootstrap the Luau runtime from the matching release zip (Windows or Linux)."""
     if os.path.exists(_BIN):
         return True
     try:
-        data = urlopen(_URL, timeout=60).read()
+        data = urlopen(_URL, timeout=90).read()
         with zipfile.ZipFile(io.BytesIO(data)) as z:
             for n in z.namelist():
-                if n.endswith("luau.exe"):
+                if os.path.basename(n) == _NAME:
                     os.makedirs(os.path.dirname(_BIN), exist_ok=True)
                     with z.open(n) as src, open(_BIN, "wb") as dst:
                         dst.write(src.read())
+                    if not _IS_WIN:
+                        os.chmod(_BIN, 0o755)
                     return True
     except Exception:
         pass

@@ -4,4 +4,3 @@ uvicorn[standard]>=0.30
 websockets>=12
 python-dotenv>=1.0
 pillow>=10.0
-lupa>=2.0
