@@ -14,6 +14,7 @@ play session. The harness still only catches what the model is bad at (QA + enum
 """
 from __future__ import annotations
 
+import asyncio
 import re
 import time
 
@@ -99,6 +100,23 @@ your level in Studio and gave feedback. Improve the WORLD-BUILDING (layout, dens
 bounded arena, decoration, structure) to address it — keep the same theme and objective. You are given
 the BUILD code; output ONLY the corrected BUILD Luau."""
 
+LEVEL_SYSTEM = r"""You are a Roblox LEVEL DESIGNER. Improve ONLY the BUILD (the static world/map) so it
+looks like a real, lively, atmospheric game level: DENSE decoration (dozens of props via helper
+functions + loops), clear structure, a bounded readable arena/path, and good lighting + an Atmosphere.
+Keep the EXACT same folder names, waypoints, spawn, and any positions/attributes the SERVER relies on
+(do not move the path or rename folders). Output ONLY the improved BUILD Luau (no markers)."""
+
+GAMEPLAY_SYSTEM = r"""You are a Roblox GAMEPLAY ENGINEER. Improve ONLY the SERVER so the game has more
+depth and feels good: more meaningful mechanics/variety where it fits, satisfying feedback, and a core
+loop that clearly works (win AND lose actually fire; the player's main action pays off). Keep every
+moving entity a PRIMITIVE with model.PrimaryPart set; keep the SAME attributes/RemoteEvents/waypoints
+the BUILD and CLIENT use. Output ONLY the improved SERVER Luau (no markers)."""
+
+FX_SYSTEM = r"""You are a Roblox FX / GAME-FEEL artist. Improve ONLY the CLIENT to make it JUICY: a
+clean HUD that reads the server's attributes, particle bursts + Sounds + TweenService animation on key
+moments, floating damage/currency popups, a little screen shake, and a real victory/defeat screen with
+payoff. Keep the SAME RemoteEvents/attributes the server uses. Output ONLY the improved CLIENT Luau."""
+
 _SECTION_RE = re.compile(r"--\s*=+\s*(BUILD|SERVER|CLIENT)\s*=+", re.I)
 
 
@@ -168,8 +186,43 @@ async def run_authored(prompt: str, client: CerebrasClient, on_event=None,
     emit_ev(on_event, "agent", id="coder", status="done",
             detail=f"{lines0} lines · {round(ct.tokens_per_sec)} tok/s")
     post_channel(on_event, "coder", "Coder",
-                 f"Done — {lines0} lines across BUILD/SERVER/CLIENT. @Reviewer can you check the gameplay loop holds together?")
+                 f"Done — {lines0} lines across BUILD/SERVER/CLIENT. Passing it to the specialists 🙌")
 
+    # --- Specialist team: each improves ONE part (parallel) so several engineers touch the game ---
+    t0_title, b0, s0, c0 = _split_sections(raw)
+    if b0 and s0:
+        ctx = f"-- BUILD --\n{b0}\n\n-- SERVER --\n{s0}\n\n-- CLIENT --\n{c0}"
+
+        async def specialist(section, sys_prompt, current, aid, name, intro, outro):
+            if len((current or "").strip()) < 20:
+                return current, None
+            emit_ev(on_event, "agent", id=aid, role="Coder", name=name, status="working")
+            post_channel(on_event, aid, name, intro)
+            t = await client.chat(
+                [{"role": "system", "content": sys_prompt},
+                 {"role": "user", "content": f"FULL GAME for context:\n{ctx}\n\nImprove ONLY the {section} "
+                  f"part. Stay consistent with the other parts (same names/attributes/RemoteEvents/"
+                  f"waypoints). Output ONLY the new {section} Luau."}],
+                max_tokens=14000, temperature=0.6)
+            out = re.sub(r"^\s*--\s*=+.*?=+\s*\n", "", _force_fix(_strip_fences(t.text or "")))
+            emit_ev(on_event, "agent", id=aid, status="done", detail=f"{round(t.tokens_per_sec)} tok/s")
+            post_channel(on_event, aid, name, outro)
+            return (out if len(out.strip()) > 30 else current), t
+
+        (b1, tb), (s1, ts), (c1, tc) = await asyncio.gather(
+            specialist("BUILD", LEVEL_SYSTEM, b0, "level", "Level Designer",
+                       "On the world — making the map dense + atmospheric. 🏗️", "@Reviewer world's much richer now."),
+            specialist("SERVER", GAMEPLAY_SYSTEM, s0, "gameplay", "Gameplay Engineer",
+                       "Deepening the core mechanics + feedback… ⚙️", "@Reviewer combat's got more depth."),
+            specialist("CLIENT", FX_SYSTEM, c0, "fx", "FX Artist",
+                       "Adding juice — particles, sounds, shake, popups. ✨", "@Reviewer wired up the game feel."))
+        for t in (tb, ts, tc):
+            if t:
+                turns.append(t)
+        raw = (f"-- TITLE: {t0_title}\n-- ===== BUILD =====\n{b1}\n"
+               f"-- ===== SERVER =====\n{s1}\n-- ===== CLIENT =====\n{c1}")
+
+    post_channel(on_event, "coder", "Coder", "@Reviewer specialists are done — can you review the whole thing? 🔍")
     emit_ev(on_event, "agent", id="qa", role="QA", name="Reviewer", status="working")
     qt = await client.chat(
         [{"role": "system", "content": QA_SYSTEM},

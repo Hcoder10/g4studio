@@ -415,8 +415,8 @@ end
 local function runStudioVision(build, server, client)
 	task.spawn(function()
 		local current = build
-		for attempt = 0, 2 do
-			task.wait(0.6)
+		for attempt = 0, 5 do  -- keep revising the map until it's actually good (or we run out)
+			task.wait(attempt == 0 and 1.2 or 0.6)  -- let the first build render
 			local ok, res = pcall(function()
 				return HttpService:RequestAsync({
 					Url = serverUrl() .. "/api/vision", Method = "POST",
@@ -427,18 +427,19 @@ local function runStudioVision(build, server, client)
 			if not ok or not res.Success then break end
 			local data = HttpService:JSONDecode(res.Body)
 			if data.error then status.Text = "Playtester: " .. tostring(data.error); break end
-			upsertAgent("playtester", "Playtester", "QA")
-			setDone("playtester", "Studio render " .. tostring(data.score) .. "/10")
+			local score = tonumber(data.score) or 0
 			status.Text = string.format("Playtester (Studio): %s/10 — %s",
 				tostring(data.score), tostring(data.verdict or ""))
 			addChannelMsg("Playtester", string.format("Took a look in Studio — map's %s/10. %s",
 				tostring(data.score), tostring(data.verdict or "")))
+			if score >= 6 then
+				addChannelMsg("Playtester", "Map looks good now ✅ @Coder nice work.")
+				break
+			end
 			if data.revised_build and #data.revised_build > 80 then
-				upsertAgent("reviser", "Reviser", "Coder"); setWorking("reviser")
-				addChannelMsg("Reviser", "@Coder map needs work — rebuilding the world per the feedback… 🔧")
+				addChannelMsg("Reviser", string.format("@Coder map's only %s/10 — rebuilding the world richer… 🔧", tostring(data.score)))
 				current = data.revised_build
 				local b2 = buildInStudio(current)
-				setDone("reviser", "rebuilt the world")
 				if not b2 then break end
 				frameCamera()
 			else
