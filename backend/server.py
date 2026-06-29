@@ -42,7 +42,7 @@ async def api_vision(req: Request):
     """Screenshot the REAL Roblox Studio window, have Gemma-4 grade the engine render,
     and (if weak) return a revised script for the plugin to rebuild. No sandbox."""
     body = await req.json()
-    script = body.get("script") or ""
+    build_src = body.get("build") or body.get("script") or ""
     attempt = int(body.get("attempt", 0))
     data_uri = capture_data_uri()
     if not data_uri:
@@ -51,7 +51,7 @@ async def api_vision(req: Request):
     try:
         crit, _vt = await client.vision_json(
             PLAYTEST_OPEN,
-            "This is a screenshot of an auto-generated Roblox game built in Studio. Grade it. Output only JSON.",
+            "This is a screenshot of an auto-generated Roblox game level built in Studio. Grade it. Output only JSON.",
             data_uri, max_tokens=1200)
         try:
             score = int(crit.get("score", 7))
@@ -60,17 +60,16 @@ async def api_vision(req: Request):
         issues = [str(x) for x in (crit.get("issues") or [])][:4]
         verdict = str(crit.get("verdict", ""))
         out = {"score": score, "issues": issues, "verdict": verdict}
-        if score < 6 and attempt < 2 and len(script) > 100:
+        if score < 6 and attempt < 2 and len(build_src) > 50:
             rv = await client.chat(
                 [{"role": "system", "content": REVISE_SYSTEM},
                  {"role": "user", "content":
-                  f"A playtester looked at your game running in Studio and scored it {score}/10. "
-                  f"Issues: {'; '.join(issues)}. Verdict: {verdict}. Improve the WORLD-BUILDING "
-                  f"(layout, density, structure, decoration) to fix this — keep the gameplay. SCRIPT:\n{script}"}],
+                  f"A playtester looked at the level in Studio and scored it {score}/10. "
+                  f"Issues: {'; '.join(issues)}. Verdict: {verdict}. Improve the world. BUILD code:\n{build_src}"}],
                 max_tokens=14000, temperature=0.5)
             revised = _strip_fences(rv.text or "")
-            if len(revised) > 200:
-                out["revised_script"] = _force_fix(revised)
+            if len(revised) > 100:
+                out["revised_build"] = _force_fix(revised)
         return out
     finally:
         await client.aclose()
@@ -122,7 +121,9 @@ async def gen_start(req: Request):
                        "rbxmx": build_to_rbxmx(build)}
             if build.get("authored"):
                 done_ev["authored"] = True
-                done_ev["script"] = build.get("script", "")
+                done_ev["build"] = build.get("build", "")
+                done_ev["server"] = build.get("server", "")
+                done_ev["client"] = build.get("client", "")
             else:
                 for s in build.get("scripts", []):
                     if s.get("name") == "G4Mechanics":

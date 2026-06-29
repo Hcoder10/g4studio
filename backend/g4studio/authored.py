@@ -1,14 +1,16 @@
-"""The harness: Gemma-4-31b AUTHORS the whole game (world + gameplay) as one Luau
-script — full control, no presets. The harness makes it reliable:
+"""The harness: Gemma-4-31b AUTHORS the whole game — full control, no presets — but as
+THREE correctly-separated parts so it runs the Roblox way:
 
-  Coder      -> writes the complete world-building + gameplay script
-  QA         -> fixes logic bugs without changing the design
-  Validator  -> deterministic Roblox-API check (the model's weak spot: hallucinated
-                enums) feeds PRECISE errors back; the MODEL repairs them
-  Safety-net -> any still-invalid enum is swapped for a safe default (never ships a crash)
+  BUILD   -> constructs the STATIC world (geometry + lighting). Run ONCE by the plugin
+             in Studio EDIT mode (editor/build work). No gameplay here.
+  SERVER  -> a Server Script (ServerScriptService) — runs at game runtime: scoring,
+             win/lose, Touched handlers, server loops, leaderstats.
+  CLIENT  -> a LocalScript (StarterPlayerScripts) — runs on each client at runtime:
+             UI/HUD, local effects, camera, input.
 
-The model decides everything; the harness only catches what it's bad at and asks it
-to fix — it never substitutes a preset for the model's authorship.
+This fixes the bug where gameplay ran in the plugin/edit runtime and never tied to a real
+play session. The harness still only catches what the model is bad at (QA + enum validation
++ the real-Studio vision loop) — it never substitutes a preset.
 """
 from __future__ import annotations
 
@@ -19,48 +21,52 @@ from .cerebras import CerebrasClient
 from .genre_common import emit_ev
 from .validate import MATERIALS, PART_TYPES, find_api_issues
 
-CODER_SYSTEM = r"""You are a master Roblox Luau engineer with FULL creative control. Write ONE complete
-server Script that, when it runs once on the server, BUILDS the entire game world AND implements all
-gameplay. You decide everything — there are no templates.
+CODER_SYSTEM = r"""You are a master Roblox engineer with FULL creative control. Author a complete
+game as THREE clearly separated parts so it runs correctly in Roblox. Output EXACTLY this format,
+using the marker lines verbatim:
 
-Start with a comment:  -- TITLE: <a short catchy game name>
+-- TITLE: <short catchy game name>
+-- ===== BUILD =====
+<Luau that BUILDS THE STATIC WORLD ONLY. This runs ONCE in Studio edit mode to construct the map:
+ geometry, models, decoration, a bounded floor + walls, a SpawnLocation, and lighting/atmosphere
+ (game.Lighting + an Atmosphere). Build it procedurally with helper functions + loops/math (rows,
+ rings via math.sin/cos, clusters) so it's lively and coherent; vary scale/rotation. Parent
+ everything under a Folder "G4Game" in Workspace, grouped in subfolders. START by clearing the old
+ build: local old = workspace:FindFirstChild("G4Game") if old then old:Destroy() end
+ DO NOT put gameplay, event handlers, loops that wait on players, leaderstats, or player logic here.>
+-- ===== SERVER =====
+<Luau for a SERVER Script that runs at game RUNTIME (in ServerScriptService). ALL server gameplay:
+ leaderstats, scoring, win/lose, part.Touched handlers, NPC/enemy logic, server loops via
+ task.spawn(function() while true do ... task.wait(t) end end). It references the already-built
+ world via workspace:WaitForChild("G4Game"). Handle Players.PlayerAdded AND Players:GetPlayers().
+ To talk to clients, create RemoteEvents in ReplicatedStorage.>
+-- ===== CLIENT =====
+<Luau for a LocalScript that runs at game RUNTIME on each client (in StarterPlayerScripts). UI/HUD,
+ score display, local effects, camera, input. Use local player = game.Players.LocalPlayer and
+ player:WaitForChild("PlayerGui"). Read leaderstats / listen to the server's RemoteEvents.>
 
-WORLD (build it procedurally, with helper functions + loops/math so it's coherent and lively):
-- FIRST, clear any previous build so re-running is clean:
-  `local old = workspace:FindFirstChild("G4Game"); if old then old:Destroy() end`
-- Make helpers for repeated props from PRIMITIVES, e.g. makeTree(x,z), makeRock(x,z), using Parts
-  with .Shape (Enum.PartType.Ball/Cylinder/Block) or WedgePart, .Material, .Color=Color3.fromRGB,
-  .Anchored=true, and PointLight for glows. Group props in a Model.
-- Lay out the world with LOOPS/MATH for real structure: a bounded floor + perimeter walls; rows,
-  rings (math.sin/cos), grids, or clusters; a clear SpawnLocation; the objective placed purposefully.
-  Vary scale/rotation a little so nothing is copy-pasted.
-- Parent everything under a Folder "G4Game" in Workspace, grouped in subfolders.
-- Set lighting/atmosphere to fit the theme (game.Lighting: ClockTime, Ambient, FogColor/FogEnd, an Atmosphere).
+Rules: only REAL Roblox API and Enums; never index a possibly-nil value (FindFirstChild /
+WaitForChild, use HumanoidRootPart not PrimaryPart); never loop without a task.wait. Make a real,
+lively, atmospheric game with a clear objective. Output ONLY the three sections."""
 
-GAMEPLAY: leaderstats; Touched / ClickDetector handlers; timers via task.spawn(function() while ...
-task.wait(t) end end); clear win/lose. Handle Players.PlayerAdded AND Players:GetPlayers().
+QA_SYSTEM = r"""You are a senior Roblox engineer reviewing a 3-part game script (BUILD / SERVER /
+CLIENT). Fix every bug WITHOUT changing the game's design: invalid Enums/API, nil indexing,
+loops missing task.wait, undefined vars, wrong service, things that error at runtime, and anything
+in the wrong part (gameplay in BUILD, build in SERVER). Also ensure BUILD has no player/gameplay
+logic. KEEP the exact `-- TITLE:` line and the `-- ===== BUILD/SERVER/CLIENT =====` markers and the
+three-part structure. Output ONLY the corrected three-part script."""
 
-ROBUSTNESS (avoid runtime errors): only use REAL Roblox Enums/API; never index a possibly-nil value
-(use FindFirstChild and the character's HumanoidRootPart, not PrimaryPart); never loop without a wait.
-Make it a real, lively, atmospheric game with a clear objective. Output ONLY valid Luau."""
+API_REPAIR_SYSTEM = r"""You are fixing a Roblox script. Replace ONLY the invalid Roblox API usages
+listed below with correct, real members that fit the intent (e.g. a rock should use Slate or Basalt).
+Change NOTHING else. KEEP the `-- TITLE:` line and the `-- ===== BUILD/SERVER/CLIENT =====` markers.
+Output ONLY the full corrected script."""
 
-QA_SYSTEM = r"""You are a senior Roblox engineer doing strict code review on a Luau Script that builds
-and runs a game. Find and FIX every bug WITHOUT changing the game's design or content:
-- invalid Enum members (Font/Material/PartType/etc. that don't exist) -> use real ones
-- indexing a possibly-nil value (e.g. character.PrimaryPart, FindFirstChild results) -> guard it
-- loops with no task.wait (would freeze) -> add a wait
-- undefined variables, wrong API names/signatures, bad parenting or ordering
-- anything that would error at runtime
-Keep ALL world-building and gameplay exactly. Output ONLY the corrected, complete Luau."""
+REVISE_SYSTEM = r"""You are improving the WORLD of a Roblox game you built. A playtester looked at a
+screenshot of the level in Studio and gave feedback. Rewrite ONLY the BUILD code to improve the
+world (layout, density, spread, a clearly bounded arena, decoration, structure) — keep the same
+theme and objective. Output ONLY the corrected BUILD Luau (no markers, just the build code)."""
 
-API_REPAIR_SYSTEM = r"""You are fixing a Luau script. Replace ONLY the invalid Roblox API usages listed
-below with correct, real members that fit the intent (e.g. a rock should use Slate or Basalt). Change
-NOTHING else about the script. Output ONLY the full corrected Luau."""
-
-REVISE_SYSTEM = r"""You are improving a Roblox game you wrote. A playtester looked at a top-down + side
-render of your level and gave feedback. Improve the WORLD-BUILDING (layout, density, spread, a clearly
-bounded arena, decoration, structure) to address it — keep the gameplay and design intent. Output ONLY
-the full corrected Luau."""
+_SECTION_RE = re.compile(r"--\s*=+\s*(BUILD|SERVER|CLIENT)\s*=+", re.I)
 
 
 def _strip_fences(s: str) -> str:
@@ -73,11 +79,30 @@ def _strip_fences(s: str) -> str:
 
 
 def _force_fix(src: str) -> str:
+    if not src:
+        return src
     src = re.sub(r"Enum\.Material\.(\w+)",
                  lambda m: m.group(0) if m.group(1) in MATERIALS else "Enum.Material.SmoothPlastic", src)
     src = re.sub(r"Enum\.PartType\.(\w+)",
                  lambda m: m.group(0) if m.group(1) in PART_TYPES else "Enum.PartType.Block", src)
     return src
+
+
+def _split_sections(text: str):
+    text = _strip_fences(text)
+    title = "G4 Game"
+    m = re.search(r"--\s*TITLE:\s*(.+)", text)
+    if m:
+        title = m.group(1).strip()[:48]
+    parts = _SECTION_RE.split(text)
+    sections = {"BUILD": "", "SERVER": "", "CLIENT": ""}
+    i = 1
+    while i + 1 < len(parts):
+        key = parts[i].upper()
+        if key in sections:
+            sections[key] = parts[i + 1].strip()
+        i += 2
+    return title, sections["BUILD"], sections["SERVER"], sections["CLIENT"]
 
 
 async def run_authored(prompt: str, client: CerebrasClient, on_event=None,
@@ -88,52 +113,49 @@ async def run_authored(prompt: str, client: CerebrasClient, on_event=None,
 
     emit_ev(on_event, "agent", id="coder", role="Coder", name="Coder", status="working")
     ct = await client.chat([{"role": "system", "content": CODER_SYSTEM},
-                            {"role": "user", "content": user}], max_tokens=14000, temperature=0.65)
+                            {"role": "user", "content": user}], max_tokens=16000, temperature=0.65)
     turns.append(ct)
-    src = _strip_fences(ct.text)
+    raw = ct.text or ""
     emit_ev(on_event, "agent", id="coder", status="done",
-            detail=f"{src.count(chr(10)) + 1} lines · {round(ct.tokens_per_sec)} tok/s")
+            detail=f"{raw.count(chr(10)) + 1} lines · {round(ct.tokens_per_sec)} tok/s")
 
     emit_ev(on_event, "agent", id="qa", role="QA", name="Reviewer", status="working")
     qt = await client.chat([{"role": "system", "content": QA_SYSTEM},
-                            {"role": "user", "content": src}], max_tokens=14000, temperature=0.2)
+                            {"role": "user", "content": raw}], max_tokens=16000, temperature=0.2)
     turns.append(qt)
-    fixed = _strip_fences(qt.text)
+    fixed = qt.text or ""
     if len(fixed) < 200:
-        fixed = src
+        fixed = raw
     emit_ev(on_event, "agent", id="qa", status="done", detail=f"reviewed · {round(qt.tokens_per_sec)} tok/s")
 
+    # API validation on the combined text, then the model repairs (stays in control)
     issues = find_api_issues(fixed)
     if issues:
         emit_ev(on_event, "agent", id="validator", role="Validator", name="API Validator", status="working")
         rt = await client.chat([{"role": "system", "content": API_REPAIR_SYSTEM},
                                 {"role": "user", "content": "INVALID API:\n" + "\n".join(issues) +
-                                 "\n\nSCRIPT:\n" + fixed}], max_tokens=14000, temperature=0.1)
+                                 "\n\nSCRIPT:\n" + fixed}], max_tokens=16000, temperature=0.1)
         turns.append(rt)
-        rfixed = _strip_fences(rt.text)
+        rfixed = rt.text or ""
         if len(rfixed) > 200:
             fixed = rfixed
-        emit_ev(on_event, "agent", id="validator", status="done",
-                detail=f"fixed {len(issues)} API error(s)")
-    fixed = _force_fix(fixed)
-    # NOTE: the vision-feedback loop now runs in REAL Roblox Studio (plugin builds the
-    # world in edit mode; server screenshots Studio via /api/vision -> Gemma grades ->
-    # the model revises). See server.api_vision + the plugin.
+        emit_ev(on_event, "agent", id="validator", status="done", detail=f"fixed {len(issues)} API error(s)")
 
-    title = "G4 Game"
-    m = re.search(r"--\s*TITLE:\s*(.+)", fixed)
-    if m:
-        title = m.group(1).strip()[:48]
+    title, build_src, server_src, client_src = _split_sections(fixed)
+    if not build_src and not server_src:  # markers missing -> treat whole as a runtime server script
+        server_src = _strip_fences(fixed)
+    build_src, server_src, client_src = _force_fix(build_src), _force_fix(server_src), _force_fix(client_src)
 
-    build = {"authored": True, "name": title, "script": fixed, "root": "G4Game"}
+    build = {"authored": True, "name": title, "build": build_src,
+             "server": server_src, "client": client_src}
     wall_ms = (time.perf_counter() - t0) * 1000.0
     metrics = {
-        "genre": "authored", "name": title, "agents": len(turns),
-        "wall_ms": round(wall_ms), "lines": fixed.count("\n") + 1,
+        "genre": "authored", "name": title, "agents": len(turns), "wall_ms": round(wall_ms),
+        "lines": (build_src + server_src + client_src).count("\n") + 1,
         "completion_tokens": sum(t.completion_tokens for t in turns),
         "agent_tps": [round(t.tokens_per_sec) for t in turns],
         "api_fixes": len(issues),
+        "has_server": bool(server_src), "has_client": bool(client_src),
     }
-    emit_ev(on_event, "authored_done", name=title, lines=metrics["lines"],
-            wall_ms=metrics["wall_ms"], api_fixes=len(issues))
+    emit_ev(on_event, "authored_done", name=title, lines=metrics["lines"], wall_ms=metrics["wall_ms"])
     return build, metrics

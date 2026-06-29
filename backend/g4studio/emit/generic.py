@@ -105,7 +105,10 @@ def script_to_rbxmx(name: str, src: str) -> str:
 
 def build_to_rbxmx(build: dict) -> str:
     if build.get("authored"):
-        return script_to_rbxmx(build.get("name", "G4Game"), build.get("script", ""))
+        # no-plugin fallback: build + server combined into one runtime Script (insert -> Play)
+        combined = (build.get("build", "") + "\n\n" + build.get("server", "")).strip() \
+            or build.get("script", "")
+        return script_to_rbxmx(build.get("name", "G4Game"), combined)
     ref = _Ref()
     root = build.get("root", "G4Game")
     by_folder: dict = {}
@@ -133,7 +136,8 @@ def build_to_rbxmx(build: dict) -> str:
 
 def build_to_luau(build: dict) -> str:
     if build.get("authored"):
-        return build.get("script", "")
+        return (build.get("build", "") + "\n\n" + build.get("server", "")).strip() \
+            or build.get("script", "")
     root = build.get("root", "G4Game")
     L = [f"-- G4Studio generated game", "local WS = workspace",
          f'local old = WS:FindFirstChild("{root}"); if old then old:Destroy() end',

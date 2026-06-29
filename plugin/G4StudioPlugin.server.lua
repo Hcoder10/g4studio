@@ -200,16 +200,27 @@ local function applyOps(ops)
 end
 
 -- ===== Authored games: build in REAL Studio + vision loop =====
-local function insertToSSS(src)
+-- Place gameplay as real Scripts that run at game RUNTIME (not in the plugin/edit runtime).
+local function placeScripts(server, client)
 	local SSS = game:GetService("ServerScriptService")
-	local old = SSS:FindFirstChild("G4GameScript"); if old then old:Destroy() end
-	local sc = Instance.new("Script"); sc.Name = "G4GameScript"; sc.Source = src; sc.Parent = SSS
+	local oldS = SSS:FindFirstChild("G4Server"); if oldS then oldS:Destroy() end
+	if server and #server > 0 then
+		local sc = Instance.new("Script"); sc.Name = "G4Server"; sc.Source = server; sc.Parent = SSS
+	end
+	local SP = game:GetService("StarterPlayer")
+	local SPS = SP:FindFirstChild("StarterPlayerScripts")
+	if not SPS then SPS = Instance.new("StarterPlayerScripts"); SPS.Parent = SP end
+	local oldC = SPS:FindFirstChild("G4Client"); if oldC then oldC:Destroy() end
+	if client and #client > 0 then
+		local lc = Instance.new("LocalScript"); lc.Name = "G4Client"; lc.Source = client; lc.Parent = SPS
+	end
 end
 
-local function buildInStudio(src)
+-- Run the BUILD code in EDIT mode (plugin runtime) to construct the static world.
+local function buildInStudio(buildSrc)
 	if not loadstring then return false, "loadstring unavailable" end
 	local old = workspace:FindFirstChild("G4Game"); if old then old:Destroy() end
-	local fn, lerr = loadstring(src)
+	local fn, lerr = loadstring(buildSrc)
 	if not fn then return false, "compile: " .. tostring(lerr) end
 	local ok, rerr = pcall(fn)
 	if not ok then return false, "runtime: " .. tostring(rerr) end
@@ -241,16 +252,16 @@ local function frameCamera()
 	end
 end
 
-local function runStudioVision(src)
+local function runStudioVision(build, server, client)
 	task.spawn(function()
-		local current = src
+		local current = build
 		for attempt = 0, 2 do
 			task.wait(0.6)
 			local ok, res = pcall(function()
 				return HttpService:RequestAsync({
 					Url = serverUrl() .. "/api/vision", Method = "POST",
 					Headers = { ["Content-Type"] = "application/json" },
-					Body = HttpService:JSONEncode({ script = current, attempt = attempt }),
+					Body = HttpService:JSONEncode({ build = current, attempt = attempt }),
 				})
 			end)
 			if not ok or not res.Success then break end
@@ -260,9 +271,9 @@ local function runStudioVision(src)
 			setDone("playtester", "Studio render " .. tostring(data.score) .. "/10")
 			status.Text = string.format("Playtester (Studio): %s/10 — %s",
 				tostring(data.score), tostring(data.verdict or ""))
-			if data.revised_script and #data.revised_script > 100 then
+			if data.revised_build and #data.revised_build > 80 then
 				upsertAgent("reviser", "Reviser", "Coder"); setWorking("reviser")
-				current = data.revised_script
+				current = data.revised_build
 				local b2 = buildInStudio(current)
 				setDone("reviser", "rebuilt the world")
 				if not b2 then break end
@@ -271,8 +282,9 @@ local function runStudioVision(src)
 				break
 			end
 		end
-		insertToSSS(current)
-		status.Text = "✅ Built + playtested in Studio. Press PLAY to play it."
+		-- gameplay runs at game runtime, not in the plugin: place Server + Client scripts
+		placeScripts(server, client)
+		status.Text = "✅ World built + Server/Client scripts placed. Press PLAY."
 	end)
 end
 
@@ -297,16 +309,17 @@ local function handleEvent(ev)
 		applyOps(ev.ops)
 	elseif ev.type == "done" then
 		local m = ev.metrics or {}
-		if ev.authored and ev.script then
-			-- build the world in REAL Studio (edit mode), then the vision loop screenshots it
+		if ev.authored and ev.build then
+			-- BUILD the static world in REAL Studio (edit/plugin runtime); gameplay scripts
+			-- are placed to run at game runtime, not in the plugin.
 			status.Text = "Building '" .. tostring(ev.name or "game") .. "' in Studio…"
-			local built, berr = buildInStudio(ev.script)
+			local built, berr = buildInStudio(ev.build)
 			if built then
 				frameCamera()
-				runStudioVision(ev.script)
+				runStudioVision(ev.build, ev.server, ev.client)
 			else
-				insertToSSS(ev.script)
-				status.Text = "Built (live preview off: " .. tostring(berr) .. "). Press PLAY."
+				placeScripts((ev.build or "") .. "\n\n" .. (ev.server or ""), ev.client)
+				status.Text = "Live preview off (" .. tostring(berr) .. "). Scripts placed. Press PLAY."
 			end
 		else
 			if ev.mechanics and buildRoot then
