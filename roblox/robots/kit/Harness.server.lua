@@ -79,8 +79,12 @@ local function ding(good: boolean)
 end
 
 -- episode + ctx --------------------------------------------------------------
+local HttpService = game:GetService("HttpService")
 local Game = require(kit:WaitForChild("Game"))
 local episode, epStart, ended
+local MASTER_AT = 2                   -- consecutive wins before Gemma forges a harder challenge
+local mastered, totalWins, winTimes = 0, 0, {}
+local extendGame                      -- forward decl (defined after ctx)
 local function newEpisode()
 	episode = Trace.new(Game.task or "so101_game", { robot = "SO101", game = Game.name or "game" })
 	epStart = os.clock(); ended = false
@@ -120,13 +124,51 @@ function ctx.win(score: number?)
 	if ended then return end
 	ended = true; ding(true); ctx.hud("✅ +" .. tostring(score or 0))
 	episode:finish(true, score or 1, SERVER)
-	task.delay(0.6, function() clearScene(); ctx.state = {}; Game.setup(ctx); newEpisode() end)
+	totalWins += 1; mastered += 1; table.insert(winTimes, os.clock() - epStart)
+	task.delay(0.6, function()
+		if mastered >= MASTER_AT then mastered = 0; task.spawn(extendGame)
+		else clearScene(); ctx.state = {}; Game.setup(ctx); newEpisode() end
+	end)
 end
 function ctx.lose()
 	if ended then return end
-	ended = true; ding(false)
+	ended = true; ding(false); mastered = 0  -- a loss breaks the mastery streak
 	episode:finish(false, 0, SERVER)
 	task.delay(0.6, function() clearScene(); ctx.state = {}; Game.setup(ctx); newEpisode() end)
+end
+
+-- Gemma extends the curriculum: once a player MASTERS the current game, fetch a harder one and
+-- hot-swap it in (needs HTTP + LoadStringEnabled). Falls back to replaying the current game.
+local function fetchExtension()
+	local ok, res = pcall(function()
+		return HttpService:RequestAsync({
+			Url = SERVER .. "/api/robotgame/extend", Method = "POST",
+			Headers = { ["Content-Type"] = "application/json" },
+			Body = HttpService:JSONEncode({
+				name = Game.name, task = Game.task, skill = Game.skill,
+				wins = totalWins, avg_seconds = winTimes[#winTimes],
+			}),
+		})
+	end)
+	if not ok or not res or not res.Success then return nil end
+	local good, data = pcall(function() return HttpService:JSONDecode(res.Body) end)
+	if not good or not data.source then return nil end
+	if not loadstring then return nil, "loadstring" end
+	local chunk = loadstring(data.source)
+	if not chunk then return nil end
+	local okg, g = pcall(chunk)
+	if okg and type(g) == "table" and type(g.setup) == "function" and type(g.step) == "function" then
+		return g
+	end
+	return nil
+end
+function extendGame()
+	ctx.hud("🔥 MASTERED! Gemma is forging a harder challenge…")
+	local g, why = fetchExtension()
+	clearScene(); ctx.state = {}
+	if g then Game = g; ctx.hud("⚡ NEW CHALLENGE — " .. tostring(Game.name or ""))
+	elseif why == "loadstring" then ctx.hud("Enable LoadStringEnabled (Game Settings ▸ Security) to evolve games") end
+	Game.setup(ctx); newEpisode()
 end
 
 -- boot

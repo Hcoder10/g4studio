@@ -124,6 +124,37 @@ async def code_game(client: CerebrasClient, design: dict) -> str:
     return _strip_fences(t.text or "")
 
 
+EXTEND_SYSTEM = (
+    DIRECTOR_SYSTEM + " IMPORTANT: the player has just MASTERED the previous game, so design the "
+    "NEXT step of a progression — the SAME robot-skill family but escalated and fresh: more objects, "
+    "tighter tolerances, time pressure, an added constraint, or a clever new twist. It must feel like "
+    "a harder level, and collect richer / more varied demonstrations of that skill."
+)
+
+
+async def extend_robot_game(client: CerebrasClient, prev: dict, stats: dict, on_event=None) -> dict:
+    """Gemma forges the NEXT, harder challenge after a game is mastered. Returns {design, source, compiles}."""
+    from .syntax import check
+    note = (f"Previous game (now mastered): '{prev.get('name')}' — skill: {prev.get('skill')}. "
+            f"Player stats: {stats}. Design the next, harder challenge in this progression.")
+    design, _ = await client.structured(EXTEND_SYSTEM, note, GAME_DESIGN_SCHEMA,
+                                        name="game_design", max_tokens=700, temperature=0.95)
+    if on_event:
+        on_event({"type": "game_design", **design})
+    source = await code_game(client, design)
+    for _ in range(2):
+        err = check(source)
+        if not err:
+            break
+        t = await client.chat(
+            [{"role": "system", "content": CODER_SYSTEM},
+             {"role": "user", "content": f"This Game module has a Luau compile error:\n{err}\n\n"
+              f"Fix it. Output ONLY the corrected module:\n{source}"}],
+            max_tokens=4000, temperature=0.3)
+        source = _strip_fences(t.text or "")
+    return {"design": design, "source": source, "compiles": check(source) is None}
+
+
 async def generate_robot_game(client: CerebrasClient, theme: str = "", on_event=None) -> dict:
     """Design + build one robot-manipulation game (with a syntax-repair loop). Returns
     {design, source, compiles}."""

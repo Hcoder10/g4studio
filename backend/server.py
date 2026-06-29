@@ -110,6 +110,22 @@ async def api_robotgame_file():
     return FileResponse(os.path.join(REPO, "out", "G4RobotGame.rbxmx"), filename="G4RobotGame.rbxmx")
 
 
+@app.post("/api/robotgame/extend")
+async def api_robotgame_extend(req: Request):
+    """A running game calls this once the player has MASTERED it; Gemma forges the next, harder
+    challenge and returns its Luau source for the game to hot-swap (loadstring) in place."""
+    from g4studio.robotgame import extend_robot_game
+    body = await req.json()
+    prev = {"name": body.get("name", "game"), "task": body.get("task", ""), "skill": body.get("skill", "")}
+    stats = {"wins": body.get("wins", 0), "avg_seconds": body.get("avg_seconds")}
+    client = CerebrasClient()
+    try:
+        g = await extend_robot_game(client, prev, stats)
+    finally:
+        await client.aclose()
+    return {"design": g["design"], "compiles": g["compiles"], "source": g["source"]}
+
+
 # ---- AI playtester that actually PLAYS the game in a real Play session ----
 LAST_GAME = {"prompt": "", "name": ""}
 LAST_BUILD = {"spec": {}, "modules": []}  # last segmented build, for the runtime-error oracle
