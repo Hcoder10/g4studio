@@ -94,39 +94,70 @@ end)
 '''
 
 CLIENT_SRC = r'''--!strict
--- G4 Robot controller (cloned into PlayerGui by the server). Aim the gripper with the mouse,
--- click to grab/release.
+-- G4 Robot controller (cloned into PlayerGui by the server). "Hover over the table" control:
+-- the gripper follows the point under your mouse at an adjustable HEIGHT, so you never aim at the
+-- arm itself. mouse = position, R/F = up/down, click = grab/release, Q/E = roll wrist.
 local Players = game:GetService("Players")
 local RS = game:GetService("ReplicatedStorage")
 local UIS = game:GetService("UserInputService")
 local RunService = game:GetService("RunService")
 local player = Players.LocalPlayer
 local control = RS:WaitForChild("G4Control")
-local mouse = player:GetMouse()
-local grip = false
-local wristRoll = 0
+local camera = workspace.CurrentCamera
+
+-- lock + hide the avatar and frame the workcell so input drives ONLY the arm
+local function lockChar(c)
+	local h = c:FindFirstChildOfClass("Humanoid") or c:WaitForChild("Humanoid")
+	h.WalkSpeed = 0; h.JumpPower = 0; pcall(function() h.JumpHeight = 0 end)
+	for _, p in ipairs(c:GetDescendants()) do
+		if p:IsA("BasePart") or p:IsA("Decal") then p.Transparency = 1 end
+	end
+end
+if player.Character then lockChar(player.Character) end
+player.CharacterAdded:Connect(lockChar)
+task.wait(0.2)
+camera.CameraType = Enum.CameraType.Scriptable
+camera.CFrame = CFrame.lookAt(Vector3.new(10, 9.5, 12), Vector3.new(-2, 2, 3))
+
+local grip, wristRoll, height = false, 0, 3.5
+local marker = Instance.new("Part")
+marker.Shape = Enum.PartType.Ball; marker.Size = Vector3.new(0.7, 0.7, 0.7)
+marker.Color = Color3.fromRGB(0, 255, 150); marker.Material = Enum.Material.Neon
+marker.Anchored = true; marker.CanCollide = false; marker.Transparency = 0.25; marker.Parent = workspace
 
 local gui = Instance.new("ScreenGui"); gui.ResetOnSpawn = false; gui.Parent = player:WaitForChild("PlayerGui")
 local lbl = Instance.new("TextLabel")
-lbl.Size = UDim2.new(0, 430, 0, 40); lbl.Position = UDim2.new(0, 20, 0, 20)
+lbl.Size = UDim2.new(0, 470, 0, 38); lbl.Position = UDim2.new(0, 20, 0, 20)
 lbl.BackgroundTransparency = 0.4; lbl.BackgroundColor3 = Color3.new(0, 0, 0)
 lbl.TextColor3 = Color3.new(1, 1, 1); lbl.Font = Enum.Font.GothamBold; lbl.TextScaled = true
-lbl.Text = "SO-101 · mouse aims · click grab/release · Q/E roll wrist"; lbl.Parent = gui
+lbl.Text = "mouse: move  ·  R/F: up-down  ·  click: grab  ·  Q/E: wrist"; lbl.Parent = gui
 
 UIS.InputBegan:Connect(function(i, gp)
 	if gp then return end
 	if i.UserInputType == Enum.UserInputType.MouseButton1 then
 		grip = not grip
-		lbl.Text = grip and "GRIPPER CLOSED — drop it in the green bin" or "GRIPPER OPEN — grab the cube"
+		lbl.Text = grip and "GRIPPER CLOSED — raise (R) and drop it in the green bin" or "GRIPPER OPEN — hover a cube, lower (F), click"
 	end
 end)
 
 local acc = 0
 RunService.RenderStepped:Connect(function(dt)
+	if UIS:IsKeyDown(Enum.KeyCode.R) then height = math.min(height + 7 * dt, 9) end
+	if UIS:IsKeyDown(Enum.KeyCode.F) then height = math.max(height - 7 * dt, 0.4) end
 	if UIS:IsKeyDown(Enum.KeyCode.Q) then wristRoll = math.clamp(wristRoll - 120 * dt, -180, 180) end
 	if UIS:IsKeyDown(Enum.KeyCode.E) then wristRoll = math.clamp(wristRoll + 120 * dt, -180, 180) end
-	acc += dt; if acc < 0.03 then return end; acc = 0
-	if mouse.Hit then control:FireServer(mouse.Hit.Position, grip, wristRoll) end
+	-- mouse ray intersected with the horizontal plane at the chosen height (never hits the arm)
+	local mp = UIS:GetMouseLocation()
+	local ray = camera:ViewportPointToRay(mp.X, mp.Y)
+	if math.abs(ray.Direction.Y) > 1e-3 then
+		local t = (height - ray.Origin.Y) / ray.Direction.Y
+		if t > 0 then
+			local target = ray.Origin + ray.Direction * t
+			marker.Position = target
+			acc += dt
+			if acc >= 0.03 then acc = 0; control:FireServer(target, grip, wristRoll) end
+		end
+	end
 end)
 '''
 

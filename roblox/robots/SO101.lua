@@ -180,6 +180,13 @@ end
 -- stops on convergence, then writes joint TARGETS — step() servo-limits the real motion, so the
 -- arm never jitters even near singular/extended poses.
 function SO101:solveTo(worldTarget: Vector3)
+    -- keep the goal inside the reachable shell around the shoulder so the arm can't fold into
+    -- itself chasing an unreachable or too-close point
+    local sh = (self.linkCF[2] or (self.base * UPFIX)).Position
+    local d = worldTarget - sh
+    local dist = d.Magnitude
+    if dist > 8.4 then worldTarget = sh + d * (8.4 / dist)
+    elseif dist > 1e-3 and dist < 2.6 then worldTarget = sh + d * (2.6 / dist) end
     local a = { self.targets[1], self.targets[2], self.targets[3], self.targets[4], self.targets[5], self.angles[6] }
     for _ = 1, IK_ITERS do
         local _, tip = fkFrames(self.base, a)
