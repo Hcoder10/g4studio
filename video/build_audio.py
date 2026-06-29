@@ -13,7 +13,7 @@ from scipy.io import wavfile
 SR = 44100; T = 54.0; N = int(T * SR)
 HERE = os.path.dirname(os.path.abspath(__file__))
 AUD = os.path.join(HERE, "audio"); os.makedirs(AUD, exist_ok=True)
-VOICE = "en-US-AndrewMultilingualNeural"
+VOICE = "en-US-AvaMultilingualNeural"
 
 # (voiceover line, start-time in seconds) — start times track the scene cuts in Video.tsx
 VO = [
@@ -53,35 +53,47 @@ def place(buf, clip, t0):
     j = min(len(buf), i+len(clip))
     if j > i: buf[i:j] += clip[:j-i]
 
-# ---- score: Am - F - C - G ----
-BAR = 2.4
+# ---- score: Am - F - C - G, energetic — 124 BPM, four-on-floor + hats + plucked bass + 16th arp ----
+BPM = 124; BEAT = 60/BPM; BAR = 4*BEAT
 prog = [(110.0, [220.0, 261.63, 329.63]), (87.31, [174.61, 220.0, 261.63]),
         (130.81, [196.0, 261.63, 329.63]), (98.0, [196.0, 246.94, 293.66])]
 def pad(freqs, dur):
     n = int(dur*SR); o = np.zeros(n)
     for f in freqs:
         for det in (-0.08, 0.0, 0.08): o += saw(f*2**(det/12), n)
-    return lp(o*adsr(n, 0.35, 0.3, 0.82, 0.5), 1500)/(len(freqs)*3)
+    return lp(o*adsr(n, 0.18, 0.2, 0.85, 0.4), 2200)/(len(freqs)*3)
 def pluck(f, dur):
-    n = int(dur*SR); return lp((sine(f, n)+0.4*sine(2*f, n))*np.exp(-np.arange(n)/SR*7.0), 2600)
-def kick(dur=0.34):
-    n = int(dur*SR); t = np.arange(n)/SR; fr = 110*np.exp(-t*22)+48
-    return np.sin(2*np.pi*np.cumsum(fr)/SR)*np.exp(-t*9.0)
+    n = int(dur*SR); return lp((sine(f, n)+0.5*sine(2*f, n))*np.exp(-np.arange(n)/SR*9.0), 3200)
+def kick(dur=0.30):
+    n = int(dur*SR); t = np.arange(n)/SR; fr = 165*np.exp(-t*30)+50
+    body = np.sin(2*np.pi*np.cumsum(fr)/SR)*np.exp(-t*7.5)
+    click = np.exp(-t*190)*np.sign(np.sin(2*np.pi*1800*t))*0.3
+    return body+click
+def hat(dur=0.05, op=False):
+    n = int(dur*SR); t = np.arange(n)/SR
+    return bp(np.random.randn(n), 6500, 15000)*np.exp(-t*(14 if op else 45))
+def bass(f, dur=0.22):
+    n = int(dur*SR); return lp((saw(f, n)*0.6+sine(f, n))*np.exp(-np.arange(n)/SR*9.0), 1100)
+def bell(f, dur=1.3):
+    n = int(dur*SR); t = np.arange(n)/SR; return (sine(f, n)+0.5*sine(2.01*f, n)+0.3*sine(3*f, n))*np.exp(-t*3)
 music = np.zeros(N); t = 0.0; bar = 0
 while t < T:
     sub, tr = prog[bar % 4]
-    place(music, pad(tr, BAR)*0.16, t)
-    place(music, sine(sub, int(BAR*SR))*adsr(int(BAR*SR), 0.05, 0.1, 0.85, 0.3)*0.20, t)
-    if t >= 4.4:
-        notes = tr+[tr[1]*2]
-        for k in range(8): place(music, pluck(notes[k % len(notes)], 0.32)*0.07, t+k*BAR/8)
-        for b in range(4): place(music, kick()*0.5, t+b*BAR/4)
+    place(music, pad(tr, BAR)*0.12, t)
+    place(music, sine(sub, int(BAR*SR))*adsr(int(BAR*SR), 0.04, 0.1, 0.85, 0.3)*0.16, t)
+    if bar >= 2:  # the beat drops after a short atmospheric intro
+        for b in range(4): place(music, kick()*0.66, t+b*BEAT)                      # four-on-floor
+        for k in range(8): place(music, hat(0.05, op=(k % 2 == 1))*(0.16 if k % 2 else 0.09), t+k*BEAT/2)
+        for bt in (0.0, 0.5, 1.5, 2.0, 2.5, 3.5): place(music, bass(sub*2)*0.24, t+bt*BEAT)  # syncopated bass
+        notes = tr+[tr[2]*2, tr[1], tr[2], tr[0]*2]
+        for k in range(16): place(music, pluck(notes[k % len(notes)], 0.16)*0.06, t+k*BEAT/4)  # 16th arp
+        place(music, bell(tr[2]*2)*0.05, t)
     t += BAR; bar += 1
 rv = music.copy()
-for dl, g in [(0.09, 0.3), (0.17, 0.22), (0.27, 0.14)]:
+for dl, g in [(0.09, 0.28), (0.17, 0.20), (0.27, 0.12)]:
     d = int(dl*SR); pp = np.zeros(len(music)); pp[d:] = music[:-d]; rv += pp*g
-music = lp(rv, 6000)
-env = np.ones(N); fin, fout = int(2.0*SR), int(3.5*SR)
+music = lp(rv, 7000)
+env = np.ones(N); fin, fout = int(1.4*SR), int(3.0*SR)
 env[:fin] = np.linspace(0, 1, fin); env[-fout:] = np.linspace(1, 0, fout); music *= env
 
 # ---- sfx ----
