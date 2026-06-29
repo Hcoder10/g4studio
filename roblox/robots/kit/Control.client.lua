@@ -12,7 +12,7 @@ local hudRemote = RS:WaitForChild("G4HUD")
 local camera = workspace.CurrentCamera
 
 local TweenService = game:GetService("TweenService")
-local CAM_CFRAME = CFrame.lookAt(Vector3.new(0, 13, 27), Vector3.new(0, 3, 4))  -- locked front-on view
+local CAM_CFRAME = CFrame.lookAt(Vector3.new(0, 11.5, 20), Vector3.new(0, 2, 5))  -- locked front-on, on the workcell
 local function lockCamera()
 	camera.CameraType = Enum.CameraType.Scriptable
 	camera.CFrame = CAM_CFRAME

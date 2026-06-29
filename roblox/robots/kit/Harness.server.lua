@@ -49,9 +49,9 @@ end
 wall(Vector3.new(25, 12, 1), Vector3.new(0, 6, -6))        -- back (far from camera)
 wall(Vector3.new(1, 12, 21), Vector3.new(-12, 6, 4))       -- left
 wall(Vector3.new(1, 12, 21), Vector3.new(12, 6, 4))        -- right
-local arm = SO101.new(workspace, CFrame.new(0, 1.5, -1.5))
-local panX = arm.linkCF[1].Position.X          -- center the base/pan axis at x=0 under the arena
-arm.base = CFrame.new(-panX, 1.5, -1.5); arm:_fk()
+-- base chosen so the arm's REACHABLE table zone (a disc the IK covers 100%) lands at world center
+-- (0,1,5) — its reachable centroid is ~(3,1,6.2) from a (0,1.5,-1.5) base, so shift by (-3,0,-1.2).
+local arm = SO101.new(workspace, CFrame.new(-3, 1.5, -2.7))
 
 local latest = { target = nil :: Vector3?, grip = false, wristRoll = 0 }
 control.OnServerEvent:Connect(function(_, t, grip, wr)
@@ -59,8 +59,8 @@ control.OnServerEvent:Connect(function(_, t, grip, wr)
 end)
 
 -- the reachable forward workcell (where games place objects)
-local SH = arm.linkCF[2].Position
-local REGION = { center = Vector3.new(0, 1.2, SH.Z + 4.2), reach = 5.5, table = tablePart }
+-- the actually-reachable workcell (centered at world 0, fully inside the arm's reachable disc)
+local REGION = { center = Vector3.new(0, 1.0, 5), reach = 3.6, table = tablePart }
 -- glowing "reach zone" disc: aim inside it and the arm reaches easily (clear, forgiving control)
 local zone = Instance.new("Part"); zone.Name = "ReachZone"; zone.Anchored = true; zone.CanCollide = false
 zone.Shape = Enum.PartType.Cylinder; zone.Size = Vector3.new(0.15, REGION.reach * 2.1, REGION.reach * 2.1)
