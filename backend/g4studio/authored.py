@@ -27,13 +27,19 @@ using the marker lines verbatim:
 
 -- TITLE: <short catchy game name>
 -- ===== BUILD =====
-<Luau that BUILDS THE STATIC WORLD ONLY. This runs ONCE in Studio edit mode to construct the map:
- geometry, models, decoration, a bounded floor + walls, a SpawnLocation, and lighting/atmosphere
- (game.Lighting + an Atmosphere). Build it procedurally with helper functions + loops/math (rows,
- rings via math.sin/cos, clusters) so it's lively and coherent; vary scale/rotation. Parent
- everything under a Folder "G4Game" in Workspace, grouped in subfolders. START by clearing the old
- build: local old = workspace:FindFirstChild("G4Game") if old then old:Destroy() end
- DO NOT put gameplay, event handlers, loops that wait on players, leaderstats, or player logic here.>
+<Luau that builds the STATIC WORLD ONLY (runs ONCE in Studio edit mode). Build it procedurally,
+ with helper functions + loops/math so it's coherent and lively:
+ - FIRST, clear any previous build so re-running is clean:
+     local old = workspace:FindFirstChild("G4Game"); if old then old:Destroy() end
+ - Make helpers for repeated props from PRIMITIVES, e.g. makeTree(x,z), makeRock(x,z), using Parts
+   with .Shape (Enum.PartType.Ball/Cylinder/Block) or WedgePart, .Material, .Color=Color3.fromRGB,
+   .Anchored=true, and PointLight for glows. Group props in a Model.
+ - Lay out the world with LOOPS/MATH for real structure: a bounded floor + perimeter walls; rows,
+   rings (math.sin/cos), grids, or clusters; a clear SpawnLocation; the objective placed purposefully.
+   Vary scale/rotation a little so nothing is copy-pasted.
+ - Parent everything under a Folder "G4Game" in Workspace, grouped in subfolders.
+ - Set lighting/atmosphere to fit the theme (game.Lighting: ClockTime, Ambient, FogColor/FogEnd, an Atmosphere).
+ DO NOT put gameplay, event handlers, leaderstats, or player logic here — those go in SERVER/CLIENT below.>
 -- ===== SERVER =====
 <Luau for a SERVER Script that runs at game RUNTIME (in ServerScriptService). ALL server gameplay:
  leaderstats, scoring, win/lose, part.Touched handlers, NPC/enemy logic, server loops via
