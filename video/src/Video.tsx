@@ -121,16 +121,22 @@ const Gemma: React.FC = () => (
 );
 
 const Loop: React.FC = () => (
-  <AbsoluteFill style={{ padding: 90, flexDirection: "row", alignItems: "center", gap: 60 }}>
-    <div style={{ flex: 1.05 }}>
+  <AbsoluteFill>
+    {/* real gameplay (sped up) as the slide background */}
+    <OffthreadVideo src={staticFile("gameplay.mp4")} loop muted
+      style={{ position: "absolute", width: "100%", height: "100%", objectFit: "cover", opacity: 0.9 }} />
+    {/* readability scrim: dark on the left where the copy sits, fading right so the play shows through */}
+    <AbsoluteFill style={{ background:
+      "linear-gradient(90deg, #070b16f2 0%, #070b16d0 36%, #070b1670 66%, #070b1633 100%)" }} />
+    <AbsoluteFill style={{ padding: 90, flexDirection: "column", justifyContent: "center" }}>
       <Kicker color={C.cyan}>data, for free</Kicker>
-      <Reveal delay={8}><div style={{ fontSize: 56, fontWeight: 800, color: C.ink, marginTop: 14, lineHeight: 1.12 }}>
-        Every playthrough is a<br /><span style={{ color: C.cyan, textShadow: glow(C.cyan, 12) }}>labeled demonstration.</span></div></Reveal>
-      <Reveal delay={26} style={{ marginTop: 40 }}>
-        <div style={{ display: "flex", gap: 40 }}>
+      <Reveal delay={8}><div style={{ fontSize: 60, fontWeight: 800, color: C.ink, marginTop: 14, lineHeight: 1.12, maxWidth: 1000 }}>
+        Every playthrough is a <span style={{ color: C.cyan, textShadow: glow(C.cyan, 12) }}>labeled demonstration.</span></div></Reveal>
+      <Reveal delay={26} style={{ marginTop: 44 }}>
+        <div style={{ display: "flex", gap: 46 }}>
           {[["42", "human demos"], ["150", "synthetic"], ["73k", "frames"]].map(([n, l]) => (
             <div key={l}>
-              <div style={{ fontSize: 76, fontWeight: 900, color: C.blue, textShadow: glow(C.blue, 14) }}>{n}</div>
+              <div style={{ fontSize: 80, fontWeight: 900, color: C.blue, textShadow: glow(C.blue, 16) }}>{n}</div>
               <div style={{ fontSize: 24, color: C.dim, letterSpacing: 2 }}>{l.toUpperCase()}</div>
             </div>
           ))}
@@ -138,10 +144,9 @@ const Loop: React.FC = () => (
       </Reveal>
       <Reveal delay={44}><div style={{ fontSize: 24, color: C.dim, marginTop: 30 }}>
         13 Gemma-invented games · every frame exported to LeRobot v2.1</div></Reveal>
-    </div>
-    <Reveal delay={20} style={{ flex: 1 }}>
-      <Img src={staticFile("dataset_bars.png")} style={{ width: "100%" }} />
-    </Reveal>
+      <Reveal delay={56}><div style={{ fontSize: 18, color: C.cyan, marginTop: 26, letterSpacing: 3, opacity: 0.85, fontWeight: 700 }}>
+        ▶ REAL PLAYTHROUGH · 12× SPEED</div></Reveal>
+    </AbsoluteFill>
   </AbsoluteFill>
 );
 
