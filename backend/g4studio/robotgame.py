@@ -6,6 +6,7 @@ builds it against the ctx API, and we syntax-check the result.
 """
 import asyncio
 import os
+import random
 
 from .authored import _strip_fences
 from .cerebras import CerebrasClient
@@ -21,9 +22,20 @@ You get a `ctx` with:
 - ctx.holding() -> BasePart? : the part currently gripped.
 - ctx.spawnCube(pos, color3?, size?) -> Part : a GRASPABLE cube.
 - ctx.spawnBin(pos, color3?, size3?) -> Part : a static target/bin/zone.
-- ctx.spawnPart({...}) -> Part : a custom anchored part; NOT graspable unless ctx.makeGraspable(p).
+- ctx.spawnPart({...}) -> Part : a custom anchored part. Use REAL Roblox Part property names in the
+  table (Size=Vector3, Color=Color3.fromRGB(...) [NOT "Color3"], Material=Enum.Material..., Shape=
+  Enum.PartType..., Transparency=n). NOT graspable unless ctx.makeGraspable(p). Prefer
+  ctx.spawnCube / ctx.spawnBin whenever you can.
 - ctx.makeGraspable(part).
-- ctx.hud(text) : the big top text — show the goal + score + countdown.
+- ctx.attachTool(props, offset?) -> Part : give the arm a tool to HOLD from the start (props = Part
+  props {Size=Vector3, Color=Color3..., Shape=Enum.PartType...}; offset = CFrame of the tool below
+  the gripper, e.g. CFrame.new(0,-1.3,0)). Returns the tool — track its .Position for dip / scoop /
+  pour / stamp detection. This makes the EASIEST games (no grabbing required).
+- EASY by default: prefer ONE held tool + ONE simple action; use generous distance thresholds
+  (>= 2 studs); win fast. Avoid precise stacking / strict order unless asked.
+- ctx.hud(text) : the big top text. Keep it SHORT and CRYSTAL CLEAR — say exactly what to do right
+  now + progress, e.g. "Grab the RED block -> drop it in the RED bin   (2 left)". Call it in setup
+  AND whenever the goal changes (next item, score, time).
 - ctx.popup(pos, text, color3?) / ctx.burst(pos, color3?) / ctx.ding(good) : juice. Use them on
   EVERY success — make it satisfying.
 - ctx.win(score) / ctx.lose() : end the round (ships the trace, auto-resets to a fresh round).
@@ -44,44 +56,60 @@ your `reward`, your `subgoal`). So:
   "reach" | "grasp" | "transport" | "place" | "sort" | "stack" | "insert" | "press" | "idle".
   This is the high-level label that makes the data useful."""
 
-EXAMPLE = r'''-- EXAMPLE (study the shape, then write your OWN different game):
+EXAMPLE = r'''-- EXAMPLE (an EASY held-tool game — study the shape, then write your OWN different easy game):
 return {
-    name = "Color Rush",
-    task = "so101_color_sort",
-    skill = "color sorting + place",
+    name = "Garden Splash",
+    task = "so101_scoop_pour",
+    skill = "scoop and pour with a held tool",
     setup = function(ctx)
         local c = ctx.region.center
-        ctx.state.redBin = ctx.spawnBin(c + Vector3.new(-3, -0.5, 0), Color3.fromRGB(220, 60, 60))
-        ctx.state.blueBin = ctx.spawnBin(c + Vector3.new(3, -0.5, 0), Color3.fromRGB(60, 110, 220))
-        local red = ctx.rand(0, 1) > 0.5
-        ctx.state.col = red and Color3.fromRGB(220, 60, 60) or Color3.fromRGB(60, 110, 220)
-        ctx.state.bin = red and ctx.state.redBin or ctx.state.blueBin
-        ctx.state.cube = ctx.spawnCube(c + Vector3.new(ctx.rand(-1.5, 1.5), 0.5, 1.5), ctx.state.col)
-        ctx.hud("Drop the cube in the matching bin!  (R/F up-down, click grab)")
+        ctx.state.bucket = ctx.attachTool({ Size = Vector3.new(1.4, 1.2, 1.4),
+            Color = Color3.fromRGB(150, 110, 70), Shape = Enum.PartType.Cylinder }, CFrame.new(0, -1.3, 0))
+        ctx.state.pond = ctx.spawnBin(c + Vector3.new(-2.5, -0.4, 0), Color3.fromRGB(40, 130, 230), Vector3.new(3, 1, 3))
+        ctx.state.plant = ctx.spawnBin(c + Vector3.new(2.5, -0.4, 0), Color3.fromRGB(70, 170, 70), Vector3.new(2, 1, 2))
+        ctx.state.filled = false
+        ctx.hud("SCOOP water from the blue pond → then POUR it on the green plant")
     end,
     step = function(ctx, dt)
-        local cube, bin = ctx.state.cube, ctx.state.bin
-        if not cube or not cube.Parent then return 0, "idle" end
-        local held = ctx.holding() == cube
-        local d = ctx.dist(cube.Position, bin.Position)
-        if d < 1.6 and cube.Position.Y < bin.Position.Y + 1.2 and not held then
-            ctx.burst(cube.Position, ctx.state.col); ctx.popup(cube.Position, "NICE!", ctx.state.col)
-            ctx.win(10); return 10, "place"
+        local b = ctx.state.bucket
+        if not (b and b.Parent) then return 0, "idle" end
+        if not ctx.state.filled and ctx.dist(b.Position, ctx.state.pond.Position) < 2.4 then
+            ctx.state.filled = true; b.Color = Color3.fromRGB(40, 130, 230)
+            ctx.burst(b.Position, Color3.fromRGB(60, 150, 255)); ctx.hud("Got water! Now POUR it on the green plant")
         end
-        if held then return -0.05 * d, (d < 2.5) and "place" or "transport"
-        else return -0.03 * ctx.dist(ctx.arm.tip.Position, cube.Position), "reach" end
+        if ctx.state.filled and ctx.dist(b.Position, ctx.state.plant.Position) < 2.4 then
+            ctx.popup(ctx.state.plant.Position, "BLOOM!", Color3.fromRGB(120, 255, 120)); ctx.win(10); return 10, "pour"
+        end
+        local goal = ctx.state.filled and ctx.state.plant or ctx.state.pond
+        return -0.05 * ctx.dist(b.Position, goal.Position), ctx.state.filled and "pour" or "scoop"
     end,
 }'''
 
 DIRECTOR_SYSTEM = (
-    "You are a game director. Invent ONE fun, juicy, addictive round-based Roblox mini-game where "
-    "the player teleoperates a realistic SO-101 robot ARM (reach, grab, move, place objects on a "
-    "small table) — and the FUN is the manipulation challenge itself. Crucial twist: winning must "
-    "REQUIRE good arm control, because every play session is secretly collecting robot training "
-    "data. Keep it buildable from cubes / bins / zones in a small reachable workcell, and make it "
-    "genuinely satisfying (timers, combos, escalating difficulty, juicy feedback). Be inventive and "
-    "vary the SKILL collected (sorting, stacking, speed-picking, insertion, balancing, sequencing)."
+    "You design fun, EASY, juicy robot-arm mini-games on a small table where every play session "
+    "secretly collects robot training data. Rules: generous tolerances (>= 2 studs), a round winnable "
+    "in ~10-20s by a casual player, a crystal-clear goal, and juicy feedback (popups / bursts / "
+    "sounds). NEVER require precise stacking, exact ordering, balancing, or tight insertion — those "
+    "are too hard to control."
 )
+
+# Easy mechanics are PICKED IN CODE (the model only themes them) — the model's untamable bias toward
+# precise stacking games means free-form invention isn't reliably easy.
+MECHANICS = [
+    "SCOOP & POUR: the arm STARTS holding a bucket (ctx.attachTool({...}, CFrame.new(0,-1.3,0))). "
+    "Dip the bucket into a blue 'source' zone to fill it (recolor it + burst), then move it over a "
+    "target zone to pour. Win on pour. No grabbing.",
+    "SWEEP: the arm STARTS holding a flat paddle (ctx.attachTool). Spawn 3-4 loose balls; push them "
+    "into one BIG glowing zone. Win when all are inside (dist < 2.5). No grabbing.",
+    "STAMP: the arm STARTS holding a stamp (ctx.attachTool). Spawn 3 glowing marks on the table; "
+    "bring the stamp within ~2 studs of each to stamp it (burst + mark it done). Win when all stamped.",
+    "DUNK: the arm STARTS holding an item (ctx.attachTool). Dip it into a pot zone (dist < 2.2), then "
+    "lift it back above a height line. Win on lift-after-dunk. No grabbing.",
+    "PUSH: one block sits on the table; nudge/push it (NO grabbing, just bump the gripper into it) "
+    "into a BIG glowing zone (dist < 2.5). Win when it's inside.",
+    "DROP-IN-BUCKET: spawn ONE ball (ctx.spawnCube); pick it up and drop it into a BIG bucket "
+    "(spawnBin, generous). Win on drop-in (dist < 2.5).",
+]
 
 CODER_SYSTEM = (
     "You are an expert Roblox/Luau engineer. Write the Game ModuleScript for the described robot "
@@ -109,16 +137,25 @@ GAME_DESIGN_SCHEMA = {
 
 
 async def design_game(client: CerebrasClient, theme: str = "") -> dict:
-    user = "Invent a robot-arm manipulation game." + (f" Theme/idea: {theme}" if theme else "")
+    mech = random.choice(MECHANICS)
+    user = ("Theme this EXACT mechanic into a fresh, juicy game — keep the mechanic and its generous "
+            "tolerances, change only the look / story / name / colors:\n" + mech)
+    if theme:
+        user += f"\nLoose theme idea: {theme}."
     design, _ = await client.structured(DIRECTOR_SYSTEM, user, GAME_DESIGN_SCHEMA,
-                                        name="game_design", max_tokens=700, temperature=0.9)
+                                        name="game_design", max_tokens=700, temperature=0.6)
+    design["_mechanic"] = mech
     return design
 
 
 async def code_game(client: CerebrasClient, design: dict) -> str:
     brief = (f"GAME: {design['name']}\nDATASET task id: {design['task']}\nSkill: {design['skill']}\n"
              f"Pitch: {design['pitch']}\nObjects: {design['objects']}\nRules: {design['rules']}\n"
-             f"Juice: {design['juice']}\n\nWrite the Game ModuleScript.")
+             f"Juice: {design['juice']}\n")
+    if design.get("_mechanic"):
+        brief += ("BASE MECHANIC — implement EXACTLY this (no stacking/ordering/precision): "
+                  + design["_mechanic"] + "\n")
+    brief += "\nWrite the Game ModuleScript."
     t = await client.chat([{"role": "system", "content": CODER_SYSTEM}, {"role": "user", "content": brief}],
                           max_tokens=4000, temperature=0.5)
     return _strip_fences(t.text or "")

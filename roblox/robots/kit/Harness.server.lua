@@ -52,6 +52,15 @@ local function clearScene()
 	sceneFolder:ClearAllChildren()
 	if arm.grasped then arm.grasped = nil end
 end
+-- safety net: any unanchored object the game spawns is a manipulable, so make it graspable even if
+-- the game forgot to tag it. (Bins/zones are anchored, so they're left alone.)
+local function autoTagGraspables()
+	for _, c in ipairs(sceneFolder:GetChildren()) do
+		if c:IsA("BasePart") and not c.Anchored and not CollectionService:HasTag(c, "Graspable") then
+			CollectionService:AddTag(c, "Graspable")
+		end
+	end
+end
 local function popup(pos: Vector3, text: string, color: Color3?)
 	local p = Instance.new("Part"); p.Anchored = true; p.CanCollide = false; p.Transparency = 1
 	p.Size = Vector3.new(1, 1, 1); p.Position = pos; p.Parent = workspace
@@ -84,7 +93,7 @@ local Game = require(kit:WaitForChild("Game"))
 local episode, epStart, ended
 local MASTER_AT = 2                   -- consecutive wins before Gemma forges a harder challenge
 local mastered, totalWins, winTimes = 0, 0, {}
-local extendGame                      -- forward decl (defined after ctx)
+local extendGame, safeSetup           -- forward decls (defined after ctx)
 local function newEpisode()
 	episode = Trace.new(Game.task or "so101_game", {
 		robot = "SO101", game = Game.name or "game", fps = 60,
@@ -116,10 +125,24 @@ function ctx.spawnBin(pos: Vector3, color: Color3?, size: Vector3?)
 end
 function ctx.spawnPart(props)
 	local p = Instance.new("Part"); p.Anchored = true; p.Parent = sceneFolder
-	for k, v in pairs(props) do (p :: any)[k] = v end
+	for k, v in pairs(props) do
+		if k == "Color3" then k = "Color" end            -- common slip: the property is Color
+		pcall(function() (p :: any)[k] = v end)          -- ignore unknown props, never crash the round
+	end
 	return p
 end
 function ctx.makeGraspable(p: BasePart) CollectionService:AddTag(p, "Graspable") end
+-- give the arm a tool to hold FROM THE START (bucket / wand / sponge) — makes easy "use the tool"
+-- games. props = Part props; offset = CFrame of the tool relative to the gripper tip.
+function ctx.attachTool(props, offset)
+	local p = Instance.new("Part"); p.Anchored = true; p.CanCollide = false; p.Parent = sceneFolder
+	for k, v in pairs(props or {}) do
+		if k == "Color3" then k = "Color" end
+		pcall(function() (p :: any)[k] = v end)
+	end
+	arm:setTool(p, offset)
+	return p
+end
 function ctx.hud(text: string) hud:FireAllClients("hud", text) end
 function ctx.popup(pos, text, color) popup(pos, text, color) end
 function ctx.burst(pos, color) burst(pos, color) end
@@ -131,14 +154,14 @@ function ctx.win(score: number?)
 	totalWins += 1; mastered += 1; table.insert(winTimes, os.clock() - epStart)
 	task.delay(0.6, function()
 		if mastered >= MASTER_AT then mastered = 0; task.spawn(extendGame)
-		else clearScene(); ctx.state = {}; Game.setup(ctx); newEpisode() end
+		else clearScene(); ctx.state = {}; safeSetup(); newEpisode() end
 	end)
 end
 function ctx.lose()
 	if ended then return end
 	ended = true; ding(false); mastered = 0  -- a loss breaks the mastery streak
 	episode:finish(false, 0, SERVER)
-	task.delay(0.6, function() clearScene(); ctx.state = {}; Game.setup(ctx); newEpisode() end)
+	task.delay(0.6, function() clearScene(); ctx.state = {}; safeSetup(); newEpisode() end)
 end
 
 -- Gemma extends the curriculum: once a player MASTERS the current game, fetch a harder one and
@@ -172,13 +195,23 @@ function extendGame()
 	clearScene(); ctx.state = {}
 	if g then Game = g; ctx.hud("⚡ NEW CHALLENGE — " .. tostring(Game.name or ""))
 	elseif why == "loadstring" then ctx.hud("Enable LoadStringEnabled (Game Settings ▸ Security) to evolve games") end
-	Game.setup(ctx); newEpisode()
+	safeSetup(); newEpisode()
+end
+
+-- run the game's setup safely: a buggy generated setup must not crash the robot/controls
+function safeSetup()
+	local ok, err = pcall(Game.setup, ctx)
+	if not ok then
+		warn("[G4Game] setup error: " .. tostring(err))
+		ctx.hud("⚠ game setup error (see Output) — the arm still works")
+	end
 end
 
 -- boot
-clearScene(); ctx.state = {}; Game.setup(ctx); newEpisode()
+clearScene(); ctx.state = {}; safeSetup(); newEpisode()
 
 RunService.Heartbeat:Connect(function(dt)
+	autoTagGraspables()
 	if latest.target then arm:solveTo(latest.target) end
 	arm:setTarget(5, latest.wristRoll)
 	arm:grip(latest.grip and 0 or 1)

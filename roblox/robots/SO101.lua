@@ -41,7 +41,7 @@ SO101.CHAIN = {
     { name = "gripper", pos = Vector3.new(0.6666, 0.6204, -0.7722), rpy = { 1.570800, -0.000000, -0.000000 }, axis = Vector3.new(0, 0, 1), lo = -10.0, hi = 100.0, mesh = "jaw" },
 }
 SO101.N = #SO101.CHAIN
-SO101.SPEED_DEG = 200
+SO101.SPEED_DEG = 420   -- joint speed cap; high = snappy mouse-following
 SO101.GRIP_CLOSED, SO101.GRIP_OPEN = 0.0, 55.0  -- joint-6 deg for grip(0) .. grip(1)
 
 local UPFIX = CFrame.Angles(-math.pi / 2, 0, 0)  -- URDF Z-up -> Roblox Y-up
@@ -140,6 +140,8 @@ function SO101.new(parent: Instance, baseCFrame: CFrame?)
     self.gripper = 1                                    -- 0 closed .. 1 open
     self.gripperTarget = 1
     self.grasped = nil
+    self.tool = nil                                     -- a permanently-held tool (bucket/wand/...)
+    self.toolOffset = CFrame.new()
     self.linkCF = {}
 
     local model = Instance.new("Model"); model.Name = "SO101"; model.Parent = parent
@@ -162,8 +164,9 @@ function SO101.new(parent: Instance, baseCFrame: CFrame?)
             if i >= 1 then self.rods[i] = part("Rod" .. i, Vector3.new(0.5, 0.5, 1), steel, model) end
         end
     end
-    self.tip = part("Tip", Vector3.new(0.3, 0.3, 0.3), Color3.fromRGB(255, 80, 80), model)
-    self.tip.Transparency = 1
+    self.tip = part("Tip", Vector3.new(0.5, 0.5, 0.5), Color3.fromRGB(255, 70, 70), model)
+    self.tip.Shape = Enum.PartType.Ball; self.tip.Material = Enum.Material.Neon
+    self.tip.Transparency = 0.35  -- VISIBLE: this is the actual grasp point (align it with the object)
 
     self:_fk()
     return self
@@ -199,6 +202,15 @@ function SO101:_fk()
     end
     self.tip.CFrame = self.linkCF[5] * TIP_OFFSET  -- gripper_frame TCP (after wrist_roll)
     self.ee = self.tip.CFrame
+    if self.tool then self.tool.CFrame = self.tip.CFrame * self.toolOffset end  -- carry a held tool
+end
+
+-- permanently hold a tool at the gripper (independent of open/close) — for "already holding a
+-- bucket / wand / sponge" games. Pass nil to drop it.
+function SO101:setTool(part: BasePart?, offset: CFrame?)
+    self.tool = part
+    self.toolOffset = offset or CFrame.new()
+    if part then part.Anchored = true end
 end
 
 -- Damped-least-squares IK with null-space posture: aim the tip at a world point using joints 1..4.
@@ -296,8 +308,8 @@ function SO101:step(dt: number)
 end
 
 function SO101:_updateGrasp()
-    if self.gripper < 0.35 and not self.grasped then
-        local best, bd = nil, 2.0
+    if self.gripper < 0.45 and not self.grasped then
+        local best, bd = nil, 3.0   -- generous catch radius (covers servo lag + IK error)
         for _, obj in ipairs(CollectionService:GetTagged("Graspable")) do
             if obj:IsA("BasePart") then
                 local d = (obj.Position - self.tip.Position).Magnitude
