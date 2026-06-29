@@ -97,13 +97,34 @@ local alPad = Instance.new("UIPadding")
 alPad.PaddingTop = UDim.new(0, 8); alPad.PaddingBottom = UDim.new(0, 8)
 alPad.PaddingLeft = UDim.new(0, 8); alPad.PaddingRight = UDim.new(0, 8); alPad.Parent = agentList
 
+-- # agents — Slack-like channel where the agents talk + ping each other
+local chanTitle = Instance.new("TextLabel")
+chanTitle.Size = UDim2.new(1, 0, 0, 16); chanTitle.BackgroundTransparency = 1
+chanTitle.Font = Enum.Font.GothamBold; chanTitle.TextSize = 12
+chanTitle.TextXAlignment = Enum.TextXAlignment.Left
+chanTitle.TextColor3 = Color3.fromRGB(125, 141, 163); chanTitle.Text = "# agents"
+chanTitle.LayoutOrder = 5; chanTitle.Parent = bg
+
+local channel = Instance.new("ScrollingFrame")
+channel.Size = UDim2.new(1, 0, 0, 160); channel.BackgroundColor3 = Color3.fromRGB(13, 19, 28)
+channel.BorderSizePixel = 0; channel.ScrollBarThickness = 4
+channel.AutomaticCanvasSize = Enum.AutomaticSize.Y; channel.CanvasSize = UDim2.new()
+channel.LayoutOrder = 6; channel.Parent = bg
+local chCorner = Instance.new("UICorner"); chCorner.CornerRadius = UDim.new(0, 8); chCorner.Parent = channel
+local chLayout = Instance.new("UIListLayout"); chLayout.Padding = UDim.new(0, 8)
+chLayout.SortOrder = Enum.SortOrder.LayoutOrder; chLayout.Parent = channel
+local chPad = Instance.new("UIPadding")
+chPad.PaddingTop = UDim.new(0, 8); chPad.PaddingBottom = UDim.new(0, 8)
+chPad.PaddingLeft = UDim.new(0, 10); chPad.PaddingRight = UDim.new(0, 10); chPad.Parent = channel
+local chanOrder = 0
+
 local status = Instance.new("TextLabel")
 status.Size = UDim2.new(1, 0, 0, 30); status.BackgroundTransparency = 1
 status.Font = Enum.Font.Gotham; status.TextSize = 13; status.TextWrapped = true
 status.TextXAlignment = Enum.TextXAlignment.Left; status.TextYAlignment = Enum.TextYAlignment.Top
 status.TextColor3 = Color3.fromRGB(125, 141, 163)
 status.Text = "Ready · " .. serverUrl()
-status.LayoutOrder = 5; status.Parent = bg
+status.LayoutOrder = 7; status.Parent = bg
 
 button.Click:Connect(function() widget.Enabled = not widget.Enabled end)
 
@@ -114,6 +135,47 @@ local cardOrder = 0
 local function clearAgents()
 	for _, c in pairs(cards) do c:Destroy() end
 	cards = {}; cardOrder = 0
+	for _, c in ipairs(channel:GetChildren()) do
+		if c:IsA("Frame") then c:Destroy() end
+	end
+	chanOrder = 0
+end
+
+-- ============================ Agent channel ================================
+local AGENT_COLORS = {
+	Coder = Color3.fromRGB(74, 163, 255), Reviewer = Color3.fromRGB(255, 184, 76),
+	Validator = Color3.fromRGB(29, 233, 182), Playtester = Color3.fromRGB(255, 105, 180),
+	Reviser = Color3.fromRGB(180, 140, 255), ["Run & Fix"] = Color3.fromRGB(0, 255, 200),
+}
+local function nameColor(name)
+	if AGENT_COLORS[name] then return AGENT_COLORS[name] end
+	local h = 0; for i = 1, #name do h = (h * 31 + string.byte(name, i)) % 360 end
+	return Color3.fromHSV(h / 360, 0.5, 1)
+end
+local function escapeRich(s)
+	return (s:gsub("&", "&amp;"):gsub("<", "&lt;"):gsub(">", "&gt;"))
+end
+local function addChannelMsg(name, text)
+	chanOrder += 1
+	local row = Instance.new("Frame")
+	row.BackgroundTransparency = 1; row.Size = UDim2.new(1, 0, 0, 0)
+	row.AutomaticSize = Enum.AutomaticSize.Y; row.LayoutOrder = chanOrder; row.Parent = channel
+	local rl = Instance.new("UIListLayout"); rl.Padding = UDim.new(0, 1)
+	rl.SortOrder = Enum.SortOrder.LayoutOrder; rl.Parent = row
+	local nm = Instance.new("TextLabel")
+	nm.BackgroundTransparency = 1; nm.Size = UDim2.new(1, 0, 0, 14)
+	nm.Font = Enum.Font.GothamBold; nm.TextSize = 12; nm.TextXAlignment = Enum.TextXAlignment.Left
+	nm.TextColor3 = nameColor(name); nm.Text = name; nm.LayoutOrder = 1; nm.Parent = row
+	local msg = Instance.new("TextLabel")
+	msg.BackgroundTransparency = 1; msg.Size = UDim2.new(1, 0, 0, 0)
+	msg.AutomaticSize = Enum.AutomaticSize.Y; msg.RichText = true; msg.TextWrapped = true
+	msg.Font = Enum.Font.Gotham; msg.TextSize = 12
+	msg.TextXAlignment = Enum.TextXAlignment.Left; msg.TextYAlignment = Enum.TextYAlignment.Top
+	msg.TextColor3 = Color3.fromRGB(205, 214, 224); msg.LayoutOrder = 2; msg.Parent = row
+	local body = escapeRich(text or ""):gsub("@([%w_%-]+)",
+		'<font color="rgb(120,200,255)"><b>@%1</b></font>')
+	msg.Text = body
+	task.defer(function() channel.CanvasPosition = Vector2.new(0, 1e6) end)
 end
 
 local function upsertAgent(id, name, role)
@@ -402,8 +464,11 @@ local function runStudioVision(build, server, client)
 			setDone("playtester", "Studio render " .. tostring(data.score) .. "/10")
 			status.Text = string.format("Playtester (Studio): %s/10 — %s",
 				tostring(data.score), tostring(data.verdict or ""))
+			addChannelMsg("Playtester", string.format("Took a look in Studio — map's %s/10. %s",
+				tostring(data.score), tostring(data.verdict or "")))
 			if data.revised_build and #data.revised_build > 80 then
 				upsertAgent("reviser", "Reviser", "Coder"); setWorking("reviser")
+				addChannelMsg("Reviser", "@Coder map needs work — rebuilding the world per the feedback… 🔧")
 				current = data.revised_build
 				local b2 = buildInStudio(current)
 				setDone("reviser", "rebuilt the world")
@@ -420,6 +485,10 @@ local function runStudioVision(build, server, client)
 end
 
 local function handleEvent(ev)
+	if ev.type == "channel" then
+		addChannelMsg(ev.name or "agent", ev.text or "")
+		return true
+	end
 	if ev.type == "genre" then
 		status.Text = "Genre: " .. tostring(ev.genre) .. " — building live…"
 	elseif ev.type == "redesign" then
@@ -641,6 +710,7 @@ local function agentPlaytest()
 		end
 		for attempt = 1, 3 do
 			status.Text = string.format("🔬 Run & Fix: Play Solo (try %d)…", attempt)
+			addChannelMsg("Run & Fix", "Running it in Play Solo to catch real bugs (try " .. attempt .. ")… 🔬")
 			placeProbe()
 			local rok, result = pcall(function() return sts:ExecutePlayModeAsync("G4PROBE") end)
 			removeProbe()
@@ -657,6 +727,7 @@ local function agentPlaytest()
 			-- runtime errors: repair the offending modules
 			if #errs > 0 then
 				status.Text = string.format("Found %d runtime error(s) — repairing…", #errs)
+				addChannelMsg("Run & Fix", string.format("@Coder caught %d runtime error(s) on Play — repairing the modules.", #errs))
 				local hok, res = pcall(function()
 					return HttpService:RequestAsync({ Url = serverUrl() .. "/api/runtime_repair", Method = "POST",
 						Headers = { ["Content-Type"] = "application/json" }, Body = HttpService:JSONEncode({ errors = errs }) })
@@ -669,6 +740,7 @@ local function agentPlaytest()
 			if not changed then
 				local ms = (map and map.score) and (" · map " .. tostring(map.score) .. "/10") or ""
 				status.Text = "✅ Ran clean — no runtime errors" .. ms .. "."
+				addChannelMsg("Run & Fix", "✅ Ran clean — no runtime errors" .. ms .. ". Ship it! 🚀")
 				break
 			end
 			status.Text = "🔧 Repaired — re-testing…"

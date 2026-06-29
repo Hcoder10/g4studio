@@ -139,4 +139,7 @@ def to_plugin_event(e: dict) -> Optional[dict]:
         return {"type": "reset"}
     if t == "assembled":
         return {"type": "stage", "ops": _spawn_win_ops(e.get("spawn"), e.get("win"))}
+    if t == "channel":  # Slack-style agent channel message
+        return {"type": "channel", "id": e.get("id"), "name": e.get("name"),
+                "text": e.get("text"), "mentions": e.get("mentions") or []}
     return None

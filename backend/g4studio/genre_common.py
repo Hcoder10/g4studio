@@ -1,6 +1,7 @@
 """Shared helpers for genre pipelines: build-ops, vectors, config baking."""
 from __future__ import annotations
 
+import re
 from typing import Any
 
 from .emit.common import hex_to_rgb
@@ -53,6 +54,14 @@ def emit_ev(cb, type_: str, **data) -> None:
             cb({"type": type_, **data})
         except Exception:
             pass
+
+
+_MENTION_RE = re.compile(r"@([A-Za-z][\w-]*)")
+
+
+def post_channel(cb, agent_id: str, name: str, text: str) -> None:
+    """Post a message to the shared agent channel (Slack-style), with @mentions parsed out."""
+    emit_ev(cb, "channel", id=agent_id, name=name, text=text, mentions=_MENTION_RE.findall(text))
 
 
 def lua_value(v: Any) -> str:

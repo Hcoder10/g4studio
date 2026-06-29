@@ -18,7 +18,7 @@ import re
 import time
 
 from .cerebras import CerebrasClient
-from .genre_common import emit_ev
+from .genre_common import emit_ev, post_channel
 from .validate import MATERIALS, PART_TYPES, find_api_issues
 
 CODER_SYSTEM = r"""You are a master Roblox Luau engineer with FULL creative control. Author a complete
@@ -140,13 +140,17 @@ async def run_authored(prompt: str, client: CerebrasClient, on_event=None,
     turns = []
     user = prompt if not feedback else prompt + "\n\nIMPROVE ON YOUR LAST ATTEMPT: " + feedback
 
+    post_channel(on_event, "coder", "Coder", "On it — drafting the whole game now (world + server + client). 🛠️")
     emit_ev(on_event, "agent", id="coder", role="Coder", name="Coder", status="working")
     ct = await client.chat([{"role": "system", "content": CODER_SYSTEM},
                             {"role": "user", "content": user}], max_tokens=16000, temperature=0.65)
     turns.append(ct)
     raw = ct.text or ""
+    lines0 = raw.count("\n") + 1
     emit_ev(on_event, "agent", id="coder", status="done",
-            detail=f"{raw.count(chr(10)) + 1} lines · {round(ct.tokens_per_sec)} tok/s")
+            detail=f"{lines0} lines · {round(ct.tokens_per_sec)} tok/s")
+    post_channel(on_event, "coder", "Coder",
+                 f"Done — {lines0} lines across BUILD/SERVER/CLIENT. @Reviewer can you check the gameplay loop holds together?")
 
     emit_ev(on_event, "agent", id="qa", role="QA", name="Reviewer", status="working")
     qt = await client.chat(
@@ -158,6 +162,8 @@ async def run_authored(prompt: str, client: CerebrasClient, on_event=None,
     if len(fixed) < 200:
         fixed = raw
     emit_ev(on_event, "agent", id="qa", status="done", detail=f"reviewed · {round(qt.tokens_per_sec)} tok/s")
+    post_channel(on_event, "qa", "Reviewer",
+                 "@Coder reviewed it end-to-end and tightened a few things. @Validator can you sweep the Roblox API + enums? 🔍")
 
     # API validation on the combined text, then the model repairs (stays in control)
     issues = find_api_issues(fixed)
@@ -171,6 +177,10 @@ async def run_authored(prompt: str, client: CerebrasClient, on_event=None,
         if len(rfixed) > 200:
             fixed = rfixed
         emit_ev(on_event, "agent", id="validator", status="done", detail=f"fixed {len(issues)} API error(s)")
+        post_channel(on_event, "validator", "Validator",
+                     f"@Coder found {len(issues)} invalid API call(s) — swapped them for real ones. All clean now ✅")
+    else:
+        post_channel(on_event, "validator", "Validator", "API + enums are all valid — nothing to fix ✅")
 
     title, build_src, server_src, client_src = _split_sections(fixed)
     if not build_src and not server_src:  # markers missing -> treat whole as a runtime server script
@@ -189,4 +199,6 @@ async def run_authored(prompt: str, client: CerebrasClient, on_event=None,
         "has_server": bool(server_src), "has_client": bool(client_src),
     }
     emit_ev(on_event, "authored_done", name=title, lines=metrics["lines"], wall_ms=metrics["wall_ms"])
+    post_channel(on_event, "coder", "Coder",
+                 f"🚀 **{title}** is ready — building it in Studio. @Playtester want to take it for a spin?")
     return build, metrics
