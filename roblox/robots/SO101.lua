@@ -60,17 +60,16 @@ SO101.MESH_OFFSET = {
     jaw = CFrame.new(-0.0380, -1.1881, 0.6237) * CFrame.Angles(0, math.pi, 0),
 }
 
--- IK tuning
-local IK_ITERS = 10      -- CCD sweeps per solve
-local IK_DAMP = 0.6      -- fraction of each computed rotation applied (damps oscillation)
-local IK_TOL = 0.12      -- stop once the tip is within this many studs of the target
-local IK_SINGULAR = 0.12 -- ignore a joint whose lever arm to tip/target is shorter than this
--- posture bias: each iteration also pulls the redundant joints toward a natural "elbow-up,
--- gripper-down" rest pose, so the solver resolves to a real configuration instead of folding the
--- arm through itself. IK_REST = joint angles (deg) of that pose; IK_REST_W = how hard to pull.
--- Tuning: if it folds the wrong way, flip the sign of the elbow entry (IK_REST[3]).
+-- IK tuning (damped least squares + null-space posture)
+local IK_ITERS = 6        -- DLS iterations per solve
+local IK_TOL = 0.1        -- stop once the tip is within this many studs of the target
+local IK_LAMBDA2 = 0.4    -- DLS damping^2 — singularity robustness (higher = smoother/slower)
+local IK_STEP = 2.0       -- cap the tip error used per iteration (studs) -> bounded joint steps
+local IK_POSTURE = 0.2    -- null-space pull toward the rest pose; lives in the REDUNDANT DOF only,
+                          -- so it shapes posture WITHOUT moving the tip off target.
+-- natural "elbow-up, gripper-down" pose the redundant freedom resolves toward (deg). If it favours
+-- the wrong elbow, flip the sign of IK_REST[3].
 local IK_REST = { 0, -50, 95, -45, 0 }
-local IK_REST_W = 0.08
 
 -- URDF rpy -> CFrame:  R = Rz(yaw) * Ry(pitch) * Rx(roll)
 local function rpy(r: number, p: number, y: number): CFrame
@@ -88,6 +87,25 @@ local function fkFrames(base: CFrame, angles: { number }): ({ CFrame }, Vector3)
         F[i] = cf
     end
     return F, (F[5] * TIP_OFFSET).Position
+end
+
+-- 3x3 inverse (row-major flat array of 9); nil if singular
+local function inv3(m: { number }): { number }?
+    local a, b, c, d, e, f, g, h, i = m[1], m[2], m[3], m[4], m[5], m[6], m[7], m[8], m[9]
+    local A, B, C = e * i - f * h, f * g - d * i, d * h - e * g
+    local det = a * A + b * B + c * C
+    if math.abs(det) < 1e-9 then return nil end
+    local id = 1 / det
+    return {
+        A * id, (c * h - b * i) * id, (b * f - c * e) * id,
+        B * id, (a * i - c * g) * id, (c * d - a * f) * id,
+        C * id, (b * g - a * h) * id, (a * e - b * d) * id,
+    }
+end
+
+local function mul3(m: { number }, v: Vector3): Vector3  -- 3x3 (flat) * Vector3
+    return Vector3.new(m[1] * v.X + m[2] * v.Y + m[3] * v.Z,
+        m[4] * v.X + m[5] * v.Y + m[6] * v.Z, m[7] * v.X + m[8] * v.Y + m[9] * v.Z)
 end
 
 local function part(name, size, color, parent)
@@ -183,36 +201,64 @@ function SO101:_fk()
     self.ee = self.tip.CFrame
 end
 
--- CCD inverse kinematics with a posture bias: aim the tip at a world point using joints 1..4,
--- while each iteration also eases the joints toward the natural rest pose. Solves continuously from
--- the current TARGETS, applies DAMPED steps, stops on convergence, then writes joint TARGETS —
--- step() servo-limits the real motion, so the arm tracks smoothly and never folds into itself.
+-- Damped-least-squares IK with null-space posture: aim the tip at a world point using joints 1..4.
+-- dq = J^T (J J^T + λ²I)^-1 e  drives the tip to the target (damped, so it's stable at singular/
+-- extended poses); the null-space term (I - J⁺J)(q_rest - q) eases the redundant freedom toward a
+-- natural elbow-up pose WITHOUT moving the tip — so it never folds into itself and never fights the
+-- goal. Solves from the persistent TARGETS; step() then servo-limits the real motion. Generic over
+-- any revolute chain (same method the SO-101's reference kinematics use).
 function SO101:solveTo(worldTarget: Vector3)
     -- keep the goal inside the reachable shell around the shoulder
     local sh = (self.linkCF[2] or (self.base * UPFIX)).Position
-    local d = worldTarget - sh
-    local dist = d.Magnitude
-    if dist > 8.4 then worldTarget = sh + d * (8.4 / dist)
-    elseif dist > 1e-3 and dist < 2.6 then worldTarget = sh + d * (2.6 / dist) end
+    local d0 = worldTarget - sh
+    local dist = d0.Magnitude
+    if dist > 8.4 then worldTarget = sh + d0 * (8.4 / dist)
+    elseif dist > 1e-3 and dist < 2.6 then worldTarget = sh + d0 * (2.6 / dist) end
 
-    local a = { self.targets[1], self.targets[2], self.targets[3], self.targets[4], self.targets[5], self.angles[6] }
+    local q = { math.rad(self.targets[1]), math.rad(self.targets[2]), math.rad(self.targets[3]), math.rad(self.targets[4]) }
     for _ = 1, IK_ITERS do
-        local _, tip = fkFrames(self.base, a)
-        local converged = (tip - worldTarget).Magnitude < IK_TOL
-        for i = 4, 1, -1 do
-            local F, t = fkFrames(self.base, a)
-            local pivot = F[i].Position
-            local axisW = F[i]:VectorToWorldSpace(SO101.CHAIN[i].axis).Unit
-            local toTip = t - pivot; toTip = toTip - axisW * toTip:Dot(axisW)
-            local toTgt = worldTarget - pivot; toTgt = toTgt - axisW * toTgt:Dot(axisW)
-            local delta = (IK_REST[i] - a[i]) * IK_REST_W  -- always ease toward the natural pose
-            if not converged and toTip.Magnitude > IK_SINGULAR and toTgt.Magnitude > IK_SINGULAR then
-                delta += math.deg(math.atan2(toTip:Cross(toTgt):Dot(axisW), toTip:Dot(toTgt))) * IK_DAMP
-            end
-            a[i] = math.clamp(a[i] + delta, SO101.CHAIN[i].lo, SO101.CHAIN[i].hi)
+        local a = { math.deg(q[1]), math.deg(q[2]), math.deg(q[3]), math.deg(q[4]), self.targets[5], self.angles[6] }
+        local F, tip = fkFrames(self.base, a)
+        local e = worldTarget - tip
+        local em = e.Magnitude
+        if em < IK_TOL then break end
+        if em > IK_STEP then e = e * (IK_STEP / em) end
+
+        -- Jacobian columns (per radian): Jc[c] = axis_c × (tip - pivot_c)
+        local Jc = table.create(4)
+        for c = 1, 4 do
+            local fr = F[c]
+            Jc[c] = fr:VectorToWorldSpace(SO101.CHAIN[c].axis):Cross(tip - fr.Position)
+        end
+        -- M = J Jᵀ + λ²I  (3x3, symmetric)
+        local M = { IK_LAMBDA2, 0, 0, 0, IK_LAMBDA2, 0, 0, 0, IK_LAMBDA2 }
+        for c = 1, 4 do
+            local j = Jc[c]
+            M[1] += j.X * j.X; M[2] += j.X * j.Y; M[3] += j.X * j.Z
+            M[4] += j.X * j.Y; M[5] += j.Y * j.Y; M[6] += j.Y * j.Z
+            M[7] += j.X * j.Z; M[8] += j.Y * j.Z; M[9] += j.Z * j.Z
+        end
+        local Minv = inv3(M)
+        if not Minv then break end
+        local y = mul3(Minv, e)                      -- (J Jᵀ + λ²I)^-1 e
+        local dq = { Jc[1]:Dot(y), Jc[2]:Dot(y), Jc[3]:Dot(y), Jc[4]:Dot(y) }  -- Jᵀ y
+
+        -- null-space posture: dq += POSTURE * (I - J⁺J)(q_rest - q)
+        local z = {
+            math.rad(IK_REST[1]) - q[1], math.rad(IK_REST[2]) - q[2],
+            math.rad(IK_REST[3]) - q[3], math.rad(IK_REST[4]) - q[4],
+        }
+        local zc = Jc[1] * z[1] + Jc[2] * z[2] + Jc[3] * z[3] + Jc[4] * z[4]
+        for c = 1, 4 do
+            local Jpinv_c = mul3(Minv, Jc[c])        -- (J Jᵀ + λ²I)^-1 Jc  (M symmetric)
+            dq[c] += IK_POSTURE * (z[c] - Jpinv_c:Dot(zc))
+        end
+
+        for c = 1, 4 do
+            q[c] = math.clamp(q[c] + dq[c], math.rad(SO101.CHAIN[c].lo), math.rad(SO101.CHAIN[c].hi))
         end
     end
-    for i = 1, 4 do self.targets[i] = a[i] end
+    for i = 1, 4 do self.targets[i] = math.deg(q[i]) end
 end
 
 function SO101:setTarget(i: number, deg: number)
