@@ -17,13 +17,16 @@ local function lockChar(c)
 	for _, p in ipairs(c:GetDescendants()) do
 		if p:IsA("BasePart") or p:IsA("Decal") then p.Transparency = 1 end
 	end
+	local hrp = c:FindFirstChild("HumanoidRootPart") or c:WaitForChild("HumanoidRootPart", 3)
+	if hrp then task.wait(0.1); hrp.CFrame = CFrame.new(0, 500, 0); hrp.Anchored = true end  -- stash far away
 end
-if player.Character then lockChar(player.Character) end
+if player.Character then task.spawn(lockChar, player.Character) end
 player.CharacterAdded:Connect(lockChar)
 task.wait(0.2)
 local TweenService = game:GetService("TweenService")
 camera.CameraType = Enum.CameraType.Scriptable
-camera.CFrame = CFrame.lookAt(Vector3.new(0, 8.5, 17), Vector3.new(0, 2.5, 2))  -- front-on into the arena
+camera.CFrame = CFrame.lookAt(Vector3.new(0, 13, 27), Vector3.new(0, 3, 4))  -- locked, front-on, frames the arena
+camera.FieldOfView = 55
 
 local grip, wristRoll, hover = false, 0, 1.2  -- hover = gripper height above the table point
 local TABLE_TOP = 0.5                          -- table surface y (matches the harness table)

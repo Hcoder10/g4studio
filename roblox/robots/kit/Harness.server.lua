@@ -33,24 +33,23 @@ for _, p in ipairs(Players:GetPlayers()) do task.spawn(giveClient, p) end
 -- a sleek work surface + an enclosed arena (open toward the camera) so it reads as a separate stage
 local arena = Instance.new("Folder"); arena.Name = "Arena"; arena.Parent = workspace
 local tablePart = Instance.new("Part")
-tablePart.Name = "Table"; tablePart.Anchored = true; tablePart.Size = Vector3.new(15, 1, 14)
-tablePart.Position = Vector3.new(0, 0, 2.5); tablePart.Color = Color3.fromRGB(38, 41, 52)
+tablePart.Name = "Table"; tablePart.Anchored = true; tablePart.Size = Vector3.new(24, 1, 20)
+tablePart.Position = Vector3.new(0, 0, 4); tablePart.Color = Color3.fromRGB(36, 39, 50)
 tablePart.Material = Enum.Material.SmoothPlastic; tablePart.Parent = arena
 local function neon(size, pos, color)
 	local p = Instance.new("Part"); p.Anchored = true; p.CanCollide = false; p.Size = size
 	p.Position = pos; p.Color = color or Color3.fromRGB(90, 170, 255); p.Material = Enum.Material.Neon
 	p.Parent = arena
 end
-neon(Vector3.new(15.4, 0.25, 14.4), Vector3.new(0, 0.6, 2.5), Color3.fromRGB(70, 150, 255))  -- table edge glow
 local function wall(size, pos)
 	local w = Instance.new("Part"); w.Anchored = true; w.Size = size; w.Position = pos
-	w.Color = Color3.fromRGB(24, 26, 34); w.Material = Enum.Material.SmoothPlastic; w.Parent = arena
-	neon(Vector3.new(size.X, 0.3, size.Z), pos + Vector3.new(0, size.Y / 2, 0))  -- top trim
+	w.Color = Color3.fromRGB(22, 24, 32); w.Material = Enum.Material.SmoothPlastic; w.Parent = arena
+	neon(Vector3.new(size.X, 0.35, size.Z), pos + Vector3.new(0, size.Y / 2, 0))  -- top trim
 end
-wall(Vector3.new(16, 8, 1), Vector3.new(0, 4.5, -4.5))     -- back (far from camera)
-wall(Vector3.new(1, 8, 13), Vector3.new(-7.5, 4.5, 2.5))   -- left
-wall(Vector3.new(1, 8, 13), Vector3.new(7.5, 4.5, 2.5))    -- right
-local arm = SO101.new(workspace, CFrame.new(0, 1.5, -1))
+wall(Vector3.new(25, 12, 1), Vector3.new(0, 6, -6))        -- back (far from camera)
+wall(Vector3.new(1, 12, 21), Vector3.new(-12, 6, 4))       -- left
+wall(Vector3.new(1, 12, 21), Vector3.new(12, 6, 4))        -- right
+local arm = SO101.new(workspace, CFrame.new(0, 1.5, -1.5))
 
 local latest = { target = nil :: Vector3?, grip = false, wristRoll = 0 }
 control.OnServerEvent:Connect(function(_, t, grip, wr)
@@ -60,6 +59,12 @@ end)
 -- the reachable forward workcell (where games place objects)
 local SH = arm.linkCF[2].Position
 local REGION = { center = Vector3.new(SH.X, 1.2, SH.Z + 4.2), reach = 5.5, table = tablePart }
+-- glowing "reach zone" disc: aim inside it and the arm reaches easily (clear, forgiving control)
+local zone = Instance.new("Part"); zone.Name = "ReachZone"; zone.Anchored = true; zone.CanCollide = false
+zone.Shape = Enum.PartType.Cylinder; zone.Size = Vector3.new(0.15, REGION.reach * 2.1, REGION.reach * 2.1)
+zone.CFrame = CFrame.new(REGION.center.X, 0.62, REGION.center.Z) * CFrame.Angles(0, 0, math.rad(90))
+zone.Color = Color3.fromRGB(60, 150, 255); zone.Material = Enum.Material.Neon; zone.Transparency = 0.84
+zone.Parent = arena
 
 -- juice + scene helpers exposed to the game ----------------------------------
 local sceneFolder = Instance.new("Folder"); sceneFolder.Name = "GameScene"; sceneFolder.Parent = workspace
