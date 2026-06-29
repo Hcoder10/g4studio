@@ -19,9 +19,15 @@ local CollectionService = game:GetService("CollectionService")
 -- Flip to true once the 7 BAKED link meshes are imported. Each link's URDF visuals are merged +
 -- scaled to studs into ONE mesh, so Roblox's re-centering is harmless — the exact post-center
 -- offset is baked in SO101.MESH_OFFSET below. No manual alignment.
-SO101.USE_MESHES = false
-SO101.MESHES = {  -- import roblox/robots/meshes/link_obj/<key>.obj and paste the MeshId here
-	base = "", shoulder = "", upper = "", fore = "", wrist = "", gripperhub = "", jaw = "",
+SO101.USE_MESHES = true
+SO101.MESHES = {  -- baked per-link meshes (roblox/robots/meshes/link_obj/<key>.obj)
+	base = "rbxassetid://95596397903989",
+	shoulder = "rbxassetid://100111761721607",
+	upper = "rbxassetid://125188763339649",
+	fore = "rbxassetid://111821043840824",
+	wrist = "rbxassetid://133675858855321",
+	gripperhub = "rbxassetid://94518968409146",
+	jaw = "rbxassetid://81908923863369",
 }
 
 -- exact chain from the URDF (studs). Each entry: joint origin (pos + rpy) relative to the parent
