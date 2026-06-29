@@ -36,6 +36,29 @@ SO101.LIMITS = {
 SO101.GRIPPER_OPEN_DEG = 32   -- finger spread when fully open
 SO101.SPEED_DEG = 160         -- max joint speed (deg/s), ~ STS3215 at 12V
 
+-- Real SO-101 geometry (imported MeshIds). The kinematics are unchanged — these render the
+-- actual parts as skins on each link. Set USE_MESHES=false to fall back to primitive blocks.
+SO101.USE_MESHES = true
+SO101.MESH_SCALE = 0.033       -- studs per mm (so the ~350mm arm is ~12 studs)
+SO101.MESHES = {
+	base = "rbxassetid://83418669346877",       -- Base_SO101
+	shoulder = "rbxassetid://130300121536438",  -- Rotation_Pitch
+	upper = "rbxassetid://135195240065862",      -- Upper_arm
+	fore = "rbxassetid://72714526696272",        -- Under_arm
+	wrist = "rbxassetid://78151202619686",       -- Wrist_Roll_Pitch
+	jaw = "rbxassetid://127752971220158",        -- Moving_Jaw
+}
+local MESH_MM = {
+	base = Vector3.new(111, 72, 87), shoulder = Vector3.new(60, 84, 46),
+	upper = Vector3.new(142, 25, 67), fore = Vector3.new(131, 24, 64),
+	wrist = Vector3.new(62, 36, 78), jaw = Vector3.new(22, 92, 48),
+}
+-- per-link visual offset for alignment (tuned against a screenshot). UPFIX = CAD Z-up -> Roblox Y-up.
+local UPFIX = CFrame.Angles(-math.pi / 2, 0, 0)
+SO101.MESH_OFFSET = {
+	base = UPFIX, shoulder = UPFIX, upper = UPFIX, fore = UPFIX, wrist = UPFIX, jaw = UPFIX,
+}
+
 local function clampDeg(i, deg)
 	local lim = SO101.LIMITS[i]
 	return math.clamp(deg, lim[1], lim[2])
@@ -48,6 +71,18 @@ local function part(name, size, color, parent)
 	p.TopSurface = Enum.SurfaceType.Smooth; p.BottomSurface = Enum.SurfaceType.Smooth
 	p.Parent = parent
 	return p
+end
+
+local function meshSkin(key: string, parent: Instance)
+	if not SO101.USE_MESHES or not SO101.MESHES[key] then return nil end
+	local mp = Instance.new("MeshPart")
+	local ok = pcall(function() mp.MeshId = SO101.MESHES[key] end)
+	if not ok then mp:Destroy(); return nil end  -- MeshId not assignable -> keep the primitive
+	mp.Size = MESH_MM[key] * SO101.MESH_SCALE
+	mp.Anchored = true; mp.CanCollide = false
+	mp.Material = Enum.Material.SmoothPlastic; mp.Color = Color3.fromRGB(48, 51, 58)
+	mp.Parent = parent
+	return mp
 end
 
 function SO101.new(parent: Instance, baseCFrame: CFrame)
@@ -75,6 +110,19 @@ function SO101.new(parent: Instance, baseCFrame: CFrame)
 	self.movingJaw = part("MovingJaw", Vector3.new(0.9, 0.3, 1.7), accent, model)  -- pivoting upper jaw
 	self.tip = part("Tip", Vector3.new(0.3, 0.3, 0.3), Color3.fromRGB(255, 80, 80), model)
 	self.tip.Transparency = 1
+
+	-- real SO-101 geometry as skins on the kinematic links (falls back to the blocks above)
+	self.skins = {
+		base = meshSkin("base", model), shoulder = meshSkin("shoulder", model),
+		upper = meshSkin("upper", model), fore = meshSkin("fore", model),
+		wrist = meshSkin("wrist", model), jaw = meshSkin("jaw", model),
+	}
+	if self.skins.base then self.p_base.Transparency = 1 end
+	if self.skins.shoulder then self.p_yaw.Transparency = 1 end
+	if self.skins.upper then self.p_upper.Transparency = 1 end
+	if self.skins.fore then self.p_fore.Transparency = 1 end
+	if self.skins.wrist then self.p_wrist.Transparency = 1; self.p_hand.Transparency = 1 end
+	if self.skins.jaw then self.movingJaw.Transparency = 1; self.fixedJaw.Transparency = 1 end
 
 	self:_fk()
 	return self
@@ -111,6 +159,18 @@ function SO101:_fk()
 	self.movingJaw.CFrame = hinge * CFrame.Angles(openRad, 0, 0) * CFrame.new(0, 0.45, -0.85)
 	self.tip.CFrame = hinge * CFrame.new(0, -0.1, -1.6)
 	self.ee = self.tip.CFrame
+
+	-- drape the real meshes over the kinematic links (offsets tunable via SO101.MESH_OFFSET)
+	if self.skins then
+		local O = SO101.MESH_OFFSET
+		local function place(s, base, off) if s and off then s.CFrame = base * off end end
+		place(self.skins.base, self.p_base.CFrame, O.base)
+		place(self.skins.shoulder, self.p_yaw.CFrame, O.shoulder)
+		place(self.skins.upper, self.p_upper.CFrame, O.upper)
+		place(self.skins.fore, self.p_fore.CFrame, O.fore)
+		place(self.skins.wrist, self.p_wrist.CFrame, O.wrist)
+		place(self.skins.jaw, self.movingJaw.CFrame, O.jaw)
+	end
 end
 
 function SO101:setTarget(i: number, deg: number)
