@@ -39,7 +39,25 @@ async def health():
 
 # ---- AI playtester that actually PLAYS the game in a real Play session ----
 LAST_GAME = {"prompt": "", "name": ""}
+LAST_BUILD = {"spec": {}, "modules": []}  # last segmented build, for the runtime-error oracle
 PLAYBOT = {"notes": []}
+
+
+@app.post("/api/runtime_repair")
+async def api_runtime_repair(req: Request):
+    """Play-test oracle: the plugin ran the game and captured runtime errors; repair the
+    offending modules and return the fixed sources for the plugin to re-place + re-run."""
+    body = await req.json()
+    errors = body.get("errors") or []
+    if not errors or not LAST_BUILD.get("modules"):
+        return {"fixed": []}
+    from g4studio.runtime import repair_runtime_errors
+    client = CerebrasClient()
+    try:
+        fixed = await repair_runtime_errors(LAST_BUILD["modules"], errors, client)
+        return {"fixed": fixed}
+    finally:
+        await client.aclose()
 
 PLAYBOT_SYSTEM = (
     "You are an AI PLAYTESTER actively PLAYING a Roblox game to TEST it. You see a screenshot from "
@@ -171,6 +189,12 @@ async def gen_start(req: Request):
             if build.get("segmented"):
                 LAST_GAME["prompt"] = prompt
                 LAST_GAME["name"] = build.get("name", "game")
+                LAST_BUILD["spec"] = build.get("spec", {})
+                LAST_BUILD["modules"] = (
+                    [{"name": s["name"], "kind": "shared", "source": s["source"]}
+                     for s in build.get("shared", [])]
+                    + [{"name": s["name"], "kind": s["side"], "source": s["source"]}
+                       for s in build.get("systems", [])])
                 done_ev["segmented"] = True
                 done_ev["shared"] = build.get("shared", [])
                 done_ev["systems"] = build.get("systems", [])

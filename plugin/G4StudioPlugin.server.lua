@@ -81,7 +81,7 @@ local btc = Instance.new("UICorner"); btc.CornerRadius = UDim.new(0, 8); btc.Par
 local playBtn = Instance.new("TextButton")
 playBtn.Size = UDim2.new(1, 0, 0, 32); playBtn.BackgroundColor3 = Color3.fromRGB(74, 163, 255)
 playBtn.BorderSizePixel = 0; playBtn.Font = Enum.Font.GothamBold; playBtn.TextSize = 14
-playBtn.TextColor3 = Color3.fromRGB(4, 18, 26); playBtn.Text = "🤖 Agent Playtest"
+playBtn.TextColor3 = Color3.fromRGB(4, 18, 26); playBtn.Text = "🔬 Run & Fix"
 playBtn.LayoutOrder = 3; playBtn.Parent = bg
 local ptc = Instance.new("UICorner"); ptc.CornerRadius = UDim.new(0, 8); ptc.Parent = playBtn
 
@@ -537,26 +537,81 @@ local function build()
 end
 buildBtn.MouseButton1Click:Connect(build)
 
+-- Runtime-error oracle: run the game in Play Solo, capture real errors, repair, re-run.
+local PROBE_SRC = [==[
+local StudioTestService = game:GetService("StudioTestService")
+local RunService = game:GetService("RunService")
+local ScriptContext = game:GetService("ScriptContext")
+local LogService = game:GetService("LogService")
+if not RunService:IsRunning() then return end
+if StudioTestService:GetTestArgs() ~= "G4PROBE" then return end
+local errors, seen = {}, {}
+local function add(message, trace, scriptName)
+	local key = tostring(message)
+	if seen[key] then return end
+	seen[key] = true
+	table.insert(errors, { message = tostring(message), trace = tostring(trace or ""), script = tostring(scriptName or "") })
+end
+ScriptContext.Error:Connect(function(message, trace, scr)
+	add(message, trace, scr and scr:GetFullName() or "")
+end)
+LogService.MessageOut:Connect(function(msg, t)
+	if t == Enum.MessageType.MessageError then add(msg, "", "") end
+end)
+task.spawn(function()
+	task.wait(15)
+	StudioTestService:EndTest({ errors = errors })
+end)
+]==]
+
+local function placeProbe()
+	local SSS = game:GetService("ServerScriptService")
+	local old = SSS:FindFirstChild("G4ErrorProbe"); if old then old:Destroy() end
+	local s = Instance.new("Script"); s.Name = "G4ErrorProbe"; s.Source = PROBE_SRC; s.Parent = SSS
+end
+
+local function removeProbe()
+	local s = game:GetService("ServerScriptService"):FindFirstChild("G4ErrorProbe")
+	if s then s:Destroy() end
+end
+
+local function applyFixedModules(fixed)
+	local RS = game:GetService("ReplicatedStorage")
+	local sharedF, sysF = RS:FindFirstChild("G4Shared"), RS:FindFirstChild("G4Systems")
+	for _, fm in ipairs(fixed) do
+		local container = (fm.kind == "shared") and sharedF or sysF
+		local inst = container and container:FindFirstChild(fm.name)
+		if inst then inst.Source = fm.source end
+	end
+end
+
 local function agentPlaytest()
 	if busy then return end
 	busy = true
-	status.Text = "Placing test bot + starting Play Solo…"
 	pcall(function() game:GetService("HttpService").HttpEnabled = true end)
-	placeTestScripts()
 	task.spawn(function()
 		local sok, sts = pcall(function() return game:GetService("StudioTestService") end)
 		if not sok or not sts then
-			status.Text = "StudioTestService unavailable (update Studio)."
-			removeTestScripts(); busy = false; return
+			status.Text = "StudioTestService unavailable (update Studio)."; busy = false; return
 		end
-		local rok, result = pcall(function() return sts:ExecutePlayModeAsync("G4PLAYTEST") end)
-		removeTestScripts()
-		if rok and type(result) == "table" then
-			status.Text = string.format("🤖 Playtest: %s/10 — %s", tostring(result.score), tostring(result.verdict))
-		elseif rok then
-			status.Text = "🤖 Playtest finished."
-		else
-			status.Text = "Playtest error: " .. tostring(result)
+		for attempt = 1, 3 do
+			status.Text = string.format("🔬 Run & Fix: launching Play Solo (try %d)…", attempt)
+			placeProbe()
+			local rok, result = pcall(function() return sts:ExecutePlayModeAsync("G4PROBE") end)
+			removeProbe()
+			if not rok then status.Text = "Playtest error: " .. tostring(result); break end
+			local errs = (type(result) == "table" and result.errors) or {}
+			if #errs == 0 then status.Text = "✅ Ran clean — no runtime errors!"; break end
+			status.Text = string.format("Found %d runtime error(s) — repairing…", #errs)
+			local hok, res = pcall(function()
+				return HttpService:RequestAsync({ Url = serverUrl() .. "/api/runtime_repair", Method = "POST",
+					Headers = { ["Content-Type"] = "application/json" }, Body = HttpService:JSONEncode({ errors = errs }) })
+			end)
+			if not hok or not res.Success then status.Text = "Repair request failed."; break end
+			local fixed = (HttpService:JSONDecode(res.Body) or {}).fixed or {}
+			if #fixed == 0 then status.Text = string.format("%d runtime error(s); no fix produced.", #errs); break end
+			applyFixedModules(fixed)
+			status.Text = string.format("🔧 Repaired %d module(s) — re-testing…", #fixed)
 		end
 		busy = false
 	end)
