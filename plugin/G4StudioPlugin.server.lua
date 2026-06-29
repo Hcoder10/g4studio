@@ -487,7 +487,7 @@ end
 local function handleEvent(ev)
 	if ev.type == "channel" then
 		addChannelMsg(ev.name or "agent", ev.text or "")
-		return true
+		return false  -- NOT a finish signal; only the "done" event ends the poll loop
 	end
 	if ev.type == "genre" then
 		status.Text = "Genre: " .. tostring(ev.genre) .. " — building live…"
@@ -620,7 +620,8 @@ local function build()
 			if ok and res.Success then
 				local data = HttpService:JSONDecode(res.Body)
 				for _, ev in ipairs(data.events or {}) do
-					if handleEvent(ev) then finished = true end
+					local hok, hres = pcall(handleEvent, ev)  -- a render error must not stall the build
+					if hok and hres then finished = true end
 				end
 				cursor = data.cursor or cursor
 				if data.done then finished = true end
