@@ -47,15 +47,16 @@ for _, p in ipairs(Players:GetPlayers()) do task.spawn(giveClient, p) end
 
 -- workcell
 local arm = SO101.new(workspace, CFrame.new(0, 2, 0))
+-- workcell kept inside the arm's reliable forward reach (shoulder ~ (2.3, 5.9, 0.6), reach ~8)
 local bin = Instance.new("Part")
-bin.Name = "Bin"; bin.Size = Vector3.new(3, 1, 3); bin.Anchored = true
-bin.Position = Vector3.new(-6, 0.5, 3); bin.Color = Color3.fromRGB(0, 170, 90); bin.Parent = workspace
+bin.Name = "Bin"; bin.Size = Vector3.new(2.5, 1, 2.5); bin.Anchored = true
+bin.Position = Vector3.new(0, 0.5, 4); bin.Color = Color3.fromRGB(0, 170, 90); bin.Parent = workspace
 
 local function spawnCube()
 	local c = Instance.new("Part")
 	c.Name = "Cube"; c.Size = Vector3.new(1, 1, 1); c.Anchored = false
 	c.Color = Color3.fromRGB(255, 170, 0); c.Material = Enum.Material.SmoothPlastic
-	c.Position = Vector3.new(math.random(-50, 50) / 10, 1, 6)
+	c.Position = Vector3.new(math.random(10, 40) / 10, 1, math.random(35, 55) / 10)
 	c.Parent = workspace
 	CollectionService:AddTag(c, "Graspable")
 	return c
