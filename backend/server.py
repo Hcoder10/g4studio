@@ -181,8 +181,11 @@ async def api_vision(req: Request):
             rv = await client.chat(
                 [{"role": "system", "content": REVISE_SYSTEM},
                  {"role": "user", "content":
-                  f"A playtester looked at the level in Studio and scored it {score}/10. "
-                  f"Issues: {'; '.join(issues)}. Verdict: {verdict}. Improve the world. BUILD code:\n{build_src}"}],
+                  f"A playtester saw the level in Studio and scored it {score}/10. FIX EACH ISSUE THEY "
+                  f"RAISED: {'; '.join(issues) or verdict}. Rewrite the BUILD to specifically address "
+                  f"them — dense decoration (dozens of props via loops), a clearly bounded arena with "
+                  f"real structure + lighting/atmosphere; keep the same theme and any coordinates/"
+                  f"waypoints/folders the gameplay relies on. BUILD code:\n{build_src}"}],
                 max_tokens=14000, temperature=0.5)
             revised = _strip_fences(rv.text or "")
             if len(revised) > 100:

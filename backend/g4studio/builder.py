@@ -16,7 +16,7 @@ import asyncio
 
 from .authored import _force_fix, _strip_fences
 from .cerebras import CerebrasClient
-from .genre_common import emit_ev
+from .genre_common import emit_ev, voice
 
 CONTRACT = r"""ARCHITECTURE CONTRACT (follow EXACTLY so the pieces integrate):
 - Shared modules live at ReplicatedStorage.G4Shared.<Name>; require via
@@ -111,7 +111,7 @@ def _spec_header(spec: dict) -> str:
             f'SHARED REMOTES: {remotes}\nSHARED MODULES: {mods}')
 
 
-async def _build_shared(sm: dict, spec: dict, client: CerebrasClient, on_event) -> str:
+async def _build_shared(sm: dict, spec: dict, client: CerebrasClient, on_event, team: str = "") -> str:
     aid = f"mod:{sm['name']}"
     emit_ev(on_event, "agent", id=aid, role="Coder", name=sm["name"], status="working")
     user = (f"{_spec_header(spec)}\n\n{CONTRACT}\n\n"
@@ -119,14 +119,20 @@ async def _build_shared(sm: dict, spec: dict, client: CerebrasClient, on_event) 
             f"Return ReplicatedStorage.G4Shared.{sm['name']}.")
     t = await client.chat([{"role": "system", "content": SHARED_SYSTEM},
                            {"role": "user", "content": user}], max_tokens=8000, temperature=0.5)
+    src = _force_fix(_strip_fences(t.text or ""))
     emit_ev(on_event, "agent", id=aid, status="done", detail=f"{round(t.tokens_per_sec)} tok/s")
-    return _force_fix(_strip_fences(t.text or ""))
+    did = (f"You built the shared module '{sm['name']}' ({sm['purpose']}). Its code:\n{src[:1700]}\n\n"
+           f"Tell the systems the exact API + data to read from you (function names, table keys, "
+           f"coordinates/waypoints, attribute names) and @mention the systems that depend on it.")
+    await voice(client, on_event, aid, sm["name"], "foundation engineer", did, team=team)
+    return src
 
 
 async def _build_system(sysd: dict, spec: dict, shared_blob: str, resolved: dict,
-                        client: CerebrasClient, on_event) -> str:
+                        client: CerebrasClient, on_event, team: str = "") -> str:
     aid = f"sys:{sysd['name']}"
-    emit_ev(on_event, "agent", id=aid, role="Coder", name=sysd["name"], status="working")
+    name = sysd["name"]
+    emit_ev(on_event, "agent", id=aid, role="Coder", name=name, status="working")
     user = (f"{_spec_header(spec)}\n\n{CONTRACT}\n\n"
             f"SHARED MODULE SOURCE (use these real APIs):\n{shared_blob}\n\n"
             f"YOUR SYSTEM:\n  name: {sysd['name']}\n  runs on: {sysd['run']}\n"
@@ -135,8 +141,15 @@ async def _build_system(sysd: dict, spec: dict, shared_blob: str, resolved: dict
             f"Build ReplicatedStorage.G4Systems.{sysd['name']} (returns a table with start()).")
     t = await client.chat([{"role": "system", "content": SYSTEM_SYSTEM},
                            {"role": "user", "content": user}], max_tokens=12000, temperature=0.55)
+    src = _force_fix(_strip_fences(t.text or ""))
     emit_ev(on_event, "agent", id=aid, status="done", detail=f"{round(t.tokens_per_sec)} tok/s")
-    return _force_fix(_strip_fences(t.text or ""))
+    did = (f"You ({name}, runs on {sysd['run']}) just built this system — {sysd['responsibility']}. "
+           f"Its code:\n{src[:1700]}\n\nTell the team the concrete interface they need from you (the exact "
+           f"attribute names you set/read, CollectionService tags, RemoteEvents you fire/listen on, shared "
+           f"data you read) and @mention whichever systems depend on it, or ask one a question if you need "
+           f"something from them.")
+    await voice(client, on_event, aid, name, "engineer", did, team=team)
+    return src
 
 
 async def run_modules(spec: dict, resolved: dict, client: CerebrasClient, on_event=None) -> list[dict]:
@@ -146,6 +159,9 @@ async def run_modules(spec: dict, resolved: dict, client: CerebrasClient, on_eve
     shared_defs += [{"name": s["name"], "purpose": s["responsibility"]}
                     for s in systems if s.get("run") == "module"]
     runnable = [s for s in systems if s.get("run") in ("server", "client")]
+    # the team roster every engineer can @mention
+    roster = ", ".join([sm["name"] for sm in shared_defs] + [s["name"] for s in runnable]
+                       + ["Integrator", "Reviewer", "Director"])
 
     # 1) shared modules first (sequential) so systems can use their real API
     shared_src: dict[str, str] = {}
@@ -153,7 +169,7 @@ async def run_modules(spec: dict, resolved: dict, client: CerebrasClient, on_eve
         if sm["name"] in shared_src:
             continue
         try:
-            shared_src[sm["name"]] = await _build_shared(sm, spec, client, on_event)
+            shared_src[sm["name"]] = await _build_shared(sm, spec, client, on_event, roster)
         except Exception:
             shared_src[sm["name"]] = f"local M = {{}}\nreturn M  -- {sm['name']} (build failed)"
     shared_blob = "\n\n".join(f"-- ReplicatedStorage.G4Shared.{n}\n{s}"
@@ -161,7 +177,7 @@ async def run_modules(spec: dict, resolved: dict, client: CerebrasClient, on_eve
 
     # 2) runnable systems in parallel; one failure must not cancel the others or kill the build
     raw = await asyncio.gather(
-        *[_build_system(s, spec, shared_blob, resolved, client, on_event) for s in runnable],
+        *[_build_system(s, spec, shared_blob, resolved, client, on_event, roster) for s in runnable],
         return_exceptions=True)
 
     modules = [{"name": n, "kind": "shared", "source": s} for n, s in shared_src.items()]

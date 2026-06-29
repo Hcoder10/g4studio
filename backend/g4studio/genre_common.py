@@ -64,6 +64,26 @@ def post_channel(cb, agent_id: str, name: str, text: str) -> None:
     emit_ev(cb, "channel", id=agent_id, name=name, text=text, mentions=_MENTION_RE.findall(text))
 
 
+async def voice(client, cb, agent_id: str, name: str, role: str, did: str, team: str = "") -> None:
+    """Have the agent that just finished SPEAK for real — an LLM writes ITS message from its actual
+    work, passing the concrete details a teammate needs, handing off, or asking a question. It may
+    @mention one or several teammates. Falls back to the raw context if the call fails."""
+    try:
+        sys = (f"You are {name}, the {role} on an AI game-studio team, posting in the team's #agents "
+               f"channel. Based on what you just did (below), write ONE message to the team that does "
+               f"something USEFUL: pass along the concrete details a teammate will need (real names, "
+               f"values, IDs, coordinates), hand off the next step, or ask a specific question. "
+               f"@mention the exact teammate(s) who need it — one or several. Be precise, not chatty. "
+               f"Under ~40 words. No surrounding quotes."
+               + (f"\nTeammates you can @mention: {team}." if team else ""))
+        t = await client.chat([{"role": "system", "content": sys},
+                               {"role": "user", "content": did}], max_tokens=130, temperature=0.7)
+        msg = (t.text or "").strip().strip('"').strip()
+        post_channel(cb, agent_id, name, msg or did[:160])
+    except Exception:
+        post_channel(cb, agent_id, name, did[:160])
+
+
 def lua_value(v: Any) -> str:
     """Serialize a Python value into a Luau literal (for baked CONFIG tables)."""
     if isinstance(v, bool):

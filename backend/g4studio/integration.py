@@ -13,7 +13,7 @@ import asyncio
 
 from .authored import _force_fix, _strip_fences
 from .cerebras import CerebrasClient
-from .genre_common import emit_ev
+from .genre_common import emit_ev, voice
 from .verify import verify
 
 REVIEW_SYSTEM = r"""You are the INTEGRATION lead reviewing a COMPLETE multi-module Roblox game.
@@ -98,6 +98,12 @@ async def run_integration_qa(spec: dict, modules: list[dict], client: CerebrasCl
     fixes = [f for f in review.get("fixes", []) if f.get("module")]
     emit_ev(on_event, "agent", id="integration", status="done",
             detail=f"{len(fixes)} integration fix(es)")
+    if fixes:
+        did = ("You reviewed every module together and found these cross-system issues:\n"
+               + "\n".join(f"- {f['module']}: {f['problem']}" for f in fixes[:6])
+               + "\nTell the responsible engineers exactly what to reconcile and @mention each of them.")
+        roster = ", ".join(m["name"] for m in modules)
+        await voice(client, on_event, "integration", "Integrator", "integration lead", did, team=roster)
     if not conventions or not fixes:
         return modules
 

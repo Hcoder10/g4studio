@@ -56,12 +56,15 @@ def capture_studio(focus: bool = True, crop_chrome: bool = True) -> Optional[byt
         return None  # minimized / tiny
 
     if crop_chrome:
-        # trim the ribbon (top) and output bar (bottom) so the 3D viewport dominates
-        t += int((b - t) * 0.11)
-        b -= int((b - t) * 0.14)
-        # trim a little off the sides (explorer / properties panels)
-        l += int((r - l) * 0.04)
-        r -= int((r - l) * 0.20)
+        # Gentle crop: remove the top ribbon + bottom status bar, and the right-side
+        # Explorer/Properties panels — but keep most of the width so the 3D viewport is
+        # ALWAYS included regardless of the user's panel layout (was cropping too hard and
+        # landing on UI panels -> "software interface").
+        h, w = b - t, r - l
+        t += int(h * 0.07)
+        b -= int(h * 0.07)
+        l += int(w * 0.01)
+        r -= int(w * 0.16)
 
     try:
         img = ImageGrab.grab(bbox=(l, t, r, b))

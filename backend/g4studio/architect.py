@@ -8,13 +8,18 @@ builder writes each system against the shared contract, then an integrator wires
 from __future__ import annotations
 
 from .cerebras import CerebrasClient
-from .genre_common import emit_ev
+from .genre_common import emit_ev, voice
 
-ARCHITECT_SYSTEM = r"""You are the lead game architect for an automated Roblox game studio.
-Given a game request, design a precise, buildable spec via the tool. Decide the SYSTEMS this
-SPECIFIC game needs — only what it needs. A simple game has 2-3 systems; a complex one (e.g.
-tower defense) needs many: lobby, matchmaking, map/build, towers, enemies, waves, economy,
-UI/HUD, VFX/audio.
+ARCHITECT_SYSTEM = r"""You are the DIRECTOR and team lead of an automated Roblox game studio — you
+run the show. The workflow you orchestrate: YOU design the game + break it into systems + define the
+shared contract -> a team of engineer subagents each build ONE system IN PARALLEL (coordinating only
+through the shared contract you set) -> an Integrator + Reviewer + a deterministic Verifier reconcile
+them -> a Playtester runs it in Studio. Your spec is what the whole team builds to, so make it
+unambiguous.
+
+Given a game request, design a precise, buildable spec via the tool. Decide the SYSTEMS this SPECIFIC
+game needs — only what it needs. A simple game has 2-3 systems; a complex one (e.g. tower defense)
+needs many: lobby, matchmaking, map/build, towers, enemies, waves, economy, UI/HUD, VFX/audio.
 
 CRITICAL — SINGLE OWNERSHIP (this is the #1 cause of broken games): every responsibility has
 EXACTLY ONE owner. NEVER let two systems build the world/map/path, spawn enemies, or own the
@@ -87,12 +92,20 @@ ARCH_SCHEMA = {
 
 
 async def run_architect(prompt: str, client: CerebrasClient, on_event=None) -> tuple[dict, object]:
-    emit_ev(on_event, "agent", id="architect", role="Architect", name="Architect", status="working")
+    emit_ev(on_event, "agent", id="director", role="Director", name="Director", status="working")
     spec, turn = await client.structured(
         ARCHITECT_SYSTEM, prompt, ARCH_SCHEMA, name="game_spec", max_tokens=4000, temperature=0.5)
-    n = len(spec.get("systems", []))
-    emit_ev(on_event, "agent", id="architect", status="done",
-            detail=f"{n} systems · {round(turn.tokens_per_sec)} tok/s")
+    systems = spec.get("systems", [])
+    emit_ev(on_event, "agent", id="director", status="done",
+            detail=f"{len(systems)} systems · {round(turn.tokens_per_sec)} tok/s")
+    # The Director assigns the work to the team of engineers.
+    roster = ", ".join(s.get("name", "?") for s in systems)
+    did = (f"You designed '{spec.get('title')}'. Each engineer builds ONE system: {roster}. "
+           f"The shared contract everyone MUST follow — RemoteEvents: {spec.get('shared_remotes')}; "
+           f"shared modules: {[m.get('name') for m in spec.get('shared_modules', [])]}; "
+           f"world/map: {str(spec.get('world', ''))[:220]}. Kick off the build and assign each "
+           f"engineer their system, and remind them of the shared pieces they share state through.")
+    await voice(client, on_event, "director", "Director", "director and team lead", did, team=roster)
     return spec, turn
 
 
