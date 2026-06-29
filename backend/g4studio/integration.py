@@ -13,7 +13,7 @@ import asyncio
 
 from .authored import _force_fix, _strip_fences
 from .cerebras import CerebrasClient
-from .genre_common import emit_ev, voice
+from .genre_common import emit_ev, post_channel, voice
 from .verify import verify
 
 REVIEW_SYSTEM = r"""You are the INTEGRATION lead reviewing a COMPLETE multi-module Roblox game.
@@ -110,10 +110,10 @@ async def run_integration_qa(spec: dict, modules: list[dict], client: CerebrasCl
     by_name = {m["name"]: m for m in modules}
 
     async def fix_one(f: dict):
-        m = by_name.get(f["module"])
+        m = by_name.get(f["module"]) or by_name.get(f["module"].split(".")[-1].split("/")[-1].strip())
         if not m:
             return None
-        aid = f"fix:{f['module']}"
+        aid = f"fix:{m['name']}"
         emit_ev(on_event, "agent", id=aid, role="Coder", name=f["module"], status="working")
         user = (f"INTEGRATION CONVENTIONS (the whole game follows these):\n{conventions}\n\n"
                 f"EVERY MODULE IN THE GAME (reconcile YOUR module against these — match exactly how "
@@ -152,6 +152,8 @@ async def run_verify_repair(spec: dict, modules: list[dict], client: CerebrasCli
             break
         emit_ev(on_event, "agent", id="verify", role="QA", name="Integration Verifier",
                 status="done", detail=f"round {rnd}: {len(issues)} mismatch(es)")
+        post_channel(on_event, "verify", "Verifier", f"Round {rnd}: {len(issues)} cross-file mismatch(es) — "
+                     + " ".join(sorted({f"@{mn}" for iss in issues for mn in iss['modules']}))[:160] + " please reconcile.")
         by_mod: dict[str, list[str]] = {}
         for iss in issues:
             for mname in iss["modules"]:
@@ -180,4 +182,5 @@ async def run_verify_repair(spec: dict, modules: list[dict], client: CerebrasCli
 
     _, remotes_used = verify(spec, modules)
     spec["shared_remotes"] = sorted(set(spec.get("shared_remotes", [])) | remotes_used)
+    post_channel(on_event, "verify", "Verifier", "All modules mechanically agree now ✅")
     return modules

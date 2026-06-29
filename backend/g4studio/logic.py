@@ -8,7 +8,7 @@ import asyncio
 
 from .authored import _force_fix, _strip_fences
 from .cerebras import CerebrasClient
-from .genre_common import emit_ev
+from .genre_common import emit_ev, post_channel
 
 LOGIC_REVIEW_SYSTEM = r"""You are the gameplay lead reviewing a COMPLETE Roblox game (you see every
 module). The code already compiles and the modules already connect — your ONLY job is whether the
@@ -60,6 +60,11 @@ def _loc(m: dict) -> str:
     return f"ReplicatedStorage.G4Systems.{m['name']} (runs: {m['kind']})"
 
 
+def _short(name: str) -> str:
+    """Normalize a reviewer-provided module name (which may be a full path) to the short key."""
+    return (name or "").split(".")[-1].split("/")[-1].split(" ")[0].strip()
+
+
 async def run_logic_qa(prompt: str, spec: dict, modules: list[dict], client: CerebrasClient,
                        on_event=None) -> list[dict]:
     blob = "\n\n".join(f"-- ===== {_loc(m)} =====\n{m['source']}" for m in modules)
@@ -70,16 +75,22 @@ async def run_logic_qa(prompt: str, spec: dict, modules: list[dict], client: Cer
         LOGIC_SCHEMA, name="logic_review", max_tokens=3500, temperature=0.3)
     fixes = [f for f in review.get("fixes", []) if f.get("module")]
     emit_ev(on_event, "agent", id="logic", status="done", detail=f"{len(fixes)} logic fix(es)")
+    if fixes:
+        post_channel(on_event, "logic", "Gameplay Logic", "Traced the core loops — found "
+                     f"{len(fixes)} gap(s): " + " ".join(f"@{_short(f['module'])}" for f in fixes[:5])
+                     + " please fix.")
+    else:
+        post_channel(on_event, "logic", "Gameplay Logic", "Traced the core loops — win/lose, rewards and progression all fire ✅")
     if not fixes:
         return modules
 
     by_name = {m["name"]: m for m in modules}
 
     async def fix_one(f: dict):
-        m = by_name.get(f["module"])
+        m = by_name.get(_short(f["module"]))
         if not m:
             return None
-        aid = f"logic:{f['module']}"
+        aid = f"logic:{m['name']}"
         emit_ev(on_event, "agent", id=aid, role="Coder", name=f["module"], status="working")
         user = (f"REQUESTED GAME: {prompt}\n\nEVERY MODULE (for context — keep shared names "
                 f"consistent):\n{blob}\n\nMODULE TO FIX: {_loc(m)}\nPROBLEM: {f['problem']}\n"

@@ -577,7 +577,7 @@ local function build()
 		pcall(function() recording = ChangeHistoryService:TryBeginRecording("G4 Studio build") end)
 
 		local cursor, finished, guard = 0, false, 0
-		while not finished and guard < 600 do
+		while not finished and guard < 12000 do  -- poll until the server is actually done (gen can run minutes)
 			guard += 1
 			local ok, res = pcall(function()
 				return HttpService:RequestAsync({

@@ -17,7 +17,7 @@ from shutil import which
 from typing import Optional
 
 from .authored import _force_fix, _strip_fences
-from .genre_common import emit_ev
+from .genre_common import emit_ev, post_channel
 
 _BIN_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "bin")
 _EXE = os.path.join(_BIN_DIR, "luau-compile.exe")
@@ -94,9 +94,13 @@ async def run_syntax_repair(modules: list[dict], client, on_event=None) -> list[
         rnd += 1
         bad = [(m, err) for m in modules if (err := check(m["source"]))]
         if not bad:
+            if rnd > 1:
+                post_channel(on_event, "syntax", "Luau Compiler", "Every module compiles cleanly ✅")
             break
         emit_ev(on_event, "agent", id="syntax", role="QA", name="Luau Compiler",
                 status="done", detail=f"round {rnd}: {len(bad)} compile error(s)")
+        post_channel(on_event, "syntax", "Luau Compiler", f"Round {rnd}: {len(bad)} module(s) won't compile — "
+                     + " ".join(f"@{m['name']}" for m, _ in bad[:5]) + " fixing.")
 
         async def fix(m: dict, err: str):
             aid = f"syntax:{m['name']}"

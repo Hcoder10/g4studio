@@ -9,7 +9,7 @@ import time
 from .architect import resolve_assets, run_architect
 from .builder import run_modules
 from .cerebras import CerebrasClient
-from .genre_common import emit_ev
+from .genre_common import emit_ev, post_channel
 from .integrate import assemble
 from .integration import run_integration_qa, run_verify_repair
 
@@ -47,4 +47,7 @@ async def run_segmented(prompt: str, client: CerebrasClient, on_event=None) -> t
     }
     emit_ev(on_event, "segmented_done", name=build["name"],
             systems=metrics["systems"], lines=total_lines, wall_ms=metrics["wall_ms"])
+    post_channel(on_event, "director", "Director",
+                 f"Shipped **{build['name']}** — {len(build.get('systems', []))} systems, {total_lines} "
+                 f"lines, all verified + compiling. Placing it in Studio. @Playtester take it for a spin 🚀")
     return build, metrics

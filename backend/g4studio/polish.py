@@ -7,8 +7,8 @@ import asyncio
 
 from .authored import _force_fix, _strip_fences
 from .cerebras import CerebrasClient
-from .genre_common import emit_ev
-from .logic import LOGIC_SCHEMA, _loc
+from .genre_common import emit_ev, post_channel
+from .logic import LOGIC_SCHEMA, _loc, _short
 
 POLISH_REVIEW_SYSTEM = r"""You are the executive producer doing the FINAL SHIP review of a complete
 Roblox game (you see every module). It compiles, the modules connect, and the core logic works.
@@ -41,16 +41,21 @@ async def run_polish_qa(prompt: str, spec: dict, modules: list[dict], client: Ce
         LOGIC_SCHEMA, name="polish_review", max_tokens=3500, temperature=0.4)
     fixes = [f for f in review.get("fixes", []) if f.get("module")]
     emit_ev(on_event, "agent", id="polish", status="done", detail=f"{len(fixes)} polish fix(es)")
+    if fixes:
+        post_channel(on_event, "polish", "Ship Review", f"Final pass — {len(fixes)} completeness/"
+                     "fun/balance fix(es): " + " ".join(f"@{_short(f['module'])}" for f in fixes[:5]))
+    else:
+        post_channel(on_event, "polish", "Ship Review", "Final pass — complete, balanced and juicy. Ready to ship ✅")
     if not fixes:
         return modules
 
     by_name = {m["name"]: m for m in modules}
 
     async def fix_one(f: dict):
-        m = by_name.get(f["module"])
+        m = by_name.get(_short(f["module"]))
         if not m:
             return None
-        aid = f"polish:{f['module']}"
+        aid = f"polish:{m['name']}"
         emit_ev(on_event, "agent", id=aid, role="Coder", name=f["module"], status="working")
         user = (f"REQUESTED GAME: {prompt}\n\nEVERY MODULE (keep shared names consistent):\n{blob}\n\n"
                 f"MODULE TO POLISH: {_loc(m)}\nPROBLEM: {f['problem']}\nFIX: {f['instruction']}\n\n"
