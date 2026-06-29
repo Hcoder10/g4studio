@@ -501,6 +501,7 @@ local function agentPlaytest()
 	if busy then return end
 	busy = true
 	status.Text = "Placing test bot + starting Play Solo…"
+	pcall(function() game:GetService("HttpService").HttpEnabled = true end)
 	placeTestScripts()
 	task.spawn(function()
 		local sok, sts = pcall(function() return game:GetService("StudioTestService") end)
