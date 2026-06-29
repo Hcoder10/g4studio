@@ -23,6 +23,9 @@ async def run_segmented(prompt: str, client: CerebrasClient, on_event=None) -> t
     modules = await run_integration_qa(spec, modules, client, on_event)
     # mechanical guarantee: verify the modules agree (attrs/tags/remotes/requires) -> repair -> repeat
     modules = await run_verify_repair(spec, modules, client, on_event)
+    # final gate: every module must actually COMPILE (real Luau compiler) -> repair -> repeat
+    from .syntax import run_syntax_repair
+    modules = await run_syntax_repair(modules, client, on_event)
     build = assemble(spec, modules)
 
     total_lines = sum(m["source"].count("\n") + 1 for m in modules)

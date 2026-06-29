@@ -25,3 +25,6 @@ Thumbs.db
 # asset RAG embedding cache + downloaded thumbnails (regenerated locally)
 *.npy
 backend/assets/thumbs/
+
+# vendored Luau compiler (self-bootstraps via syntax.py)
+backend/bin/

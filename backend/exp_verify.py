@@ -12,12 +12,18 @@ async def main():
         spec = build["spec"]
         modules = [{"name": s["name"], "kind": "shared", "source": s["source"]} for s in build["shared"]]
         modules += [{"name": s["name"], "kind": s["side"], "source": s["source"]} for s in build["systems"]]
+        from g4studio.syntax import check
         issues, remotes = verify(spec, modules)
         print("METRICS:", {k: m[k] for k in ("name","systems","shared","lines","wall_ms")})
         print("shared_remotes (after union):", spec.get("shared_remotes"))
         print("REMAINING MISMATCHES:", len(issues))
         for i in issues:
             print("  -", i["detail"][:150])
+        bad = [(mod["name"], check(mod["source"])) for mod in modules]
+        bad = [(n, e) for n, e in bad if e]
+        print("COMPILE ERRORS:", len(bad))
+        for n, e in bad:
+            print("  -", n, ":", e)
     finally:
         await client.aclose()
 asyncio.run(main())
