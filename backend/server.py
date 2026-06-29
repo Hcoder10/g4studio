@@ -88,16 +88,25 @@ def _build_robot_game(source: str) -> str:
     return bg.build(source, os.path.join(REPO, "out", "G4RobotGame.rbxmx"))
 
 
+@app.get("/api/families")
+async def api_families():
+    """The structured task families a game can be generated in (skill + variation axes)."""
+    from g4studio.families import FAMILIES
+    return FAMILIES
+
+
 @app.post("/api/robotgame")
 async def api_robotgame(req: Request):
-    """Gemma designs + codes a fun robot-manipulation game (data falls out of play) and we package
-    it with the kit into out/G4RobotGame.rbxmx."""
-    from g4studio.robotgame import generate_robot_game
+    """Gemma designs + codes a fun robot-manipulation game (data falls out of play) and packages it
+    with the kit into out/G4RobotGame.rbxmx. Pass {"family": "<id>"} for a structured, deduped task
+    family, or {"theme": "..."} for free-text steering."""
+    from g4studio.robotgame import generate_in_family, generate_robot_game
     body = await req.json()
+    family = (body.get("family") or "").strip()
     theme = (body.get("theme") or "").strip()
     client = CerebrasClient()
     try:
-        g = await generate_robot_game(client, theme)
+        g = await (generate_in_family(client, family) if family else generate_robot_game(client, theme))
     finally:
         await client.aclose()
     path = _build_robot_game(g["source"])

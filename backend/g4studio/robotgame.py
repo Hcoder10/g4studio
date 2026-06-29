@@ -124,6 +124,41 @@ async def code_game(client: CerebrasClient, design: dict) -> str:
     return _strip_fences(t.text or "")
 
 
+async def generate_in_family(client: CerebrasClient, family: str, on_event=None) -> dict:
+    """Generate a game inside a structured task FAMILY: steered to the family's skill, varied across
+    the family's axes, and deduped against everything generated in that family so far."""
+    from .families import FAMILIES, family_context, is_duplicate, load_registry, save_design
+    from .syntax import check
+    if family not in FAMILIES:
+        return await generate_robot_game(client, family, on_event)  # fall back: treat as a theme
+    prior = load_registry().get(family, [])
+    design = None
+    for _ in range(3):  # resample until distinct from prior in this family
+        sys = DIRECTOR_SYSTEM + family_context(family, prior)
+        d, _t = await client.structured(sys, f"Design a fresh '{family}' game.",
+                                        GAME_DESIGN_SCHEMA, name="game_design", max_tokens=700, temperature=1.0)
+        d["family"] = family
+        if not is_duplicate(d, prior):
+            design = d
+            break
+        design = d
+    save_design(family, design)
+    if on_event:
+        on_event({"type": "game_design", **design})
+    source = await code_game(client, design)
+    for _ in range(2):
+        err = check(source)
+        if not err:
+            break
+        t = await client.chat(
+            [{"role": "system", "content": CODER_SYSTEM},
+             {"role": "user", "content": f"This Game module has a Luau compile error:\n{err}\n\n"
+              f"Fix it. Output ONLY the corrected module:\n{source}"}],
+            max_tokens=4000, temperature=0.3)
+        source = _strip_fences(t.text or "")
+    return {"design": design, "source": source, "compiles": check(source) is None}
+
+
 EXTEND_SYSTEM = (
     DIRECTOR_SYSTEM + " IMPORTANT: the player has just MASTERED the previous game, so design the "
     "NEXT step of a progression — the SAME robot-skill family but escalated and fresh: more objects, "

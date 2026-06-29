@@ -418,11 +418,15 @@ p { margin:0 0 1rem; }
 .fall-top .eyebrow { color:var(--sky-700); }
 .fall-bottom .eyebrow { color:var(--gold-300); }
 .fall-title { font-size:clamp(1.8rem,3.6vw,2.9rem); font-weight:800; letter-spacing:-.02em; max-width:560px; }
-.fall-top .fall-title { color:var(--ink-900); }
-.fall-bottom .fall-title { color:var(--cream-50); }
+.fall-top .fall-title { color:var(--ink-900); text-shadow:0 2px 24px rgba(224,244,255,.7); }
+.fall-bottom .fall-title { color:var(--cream-50); text-shadow:0 2px 24px rgba(39,10,12,.85), 0 1px 2px rgba(39,10,12,.6); }
 .fall-sub { max-width:480px; font-size:1.02rem; }
 .fall-top .fall-sub { color:var(--ink-700); }
-.fall-bottom .fall-sub { color:var(--cream-300); }
+.fall-bottom .fall-sub { color:var(--cream-300); text-shadow:0 1px 14px rgba(39,10,12,.9); }
+.fall-top .eyebrow, .fall-bottom .eyebrow { text-shadow:none; }
+.fall-bottom .wrap { position:relative; }
+.fall-bottom .wrap::before { content:""; position:absolute; inset:-24px -30px; z-index:-1;
+  background:radial-gradient(70% 120% at 18% 50%, rgba(39,10,12,.6), transparent 75%); border-radius:30px; }
 
 /* ============================================================================
    FOUNDRY (maroon)
@@ -571,6 +575,7 @@ p { margin:0 0 1rem; }
 }
 @media (max-width:760px) {
   .nav-links { display:none; }
+  .nav-cta .chip { display:none; }
   .nav-toggle { display:inline-flex; }
   .pipeline { grid-template-columns:1fr; }
   .beat .arrow { display:none !important; }
