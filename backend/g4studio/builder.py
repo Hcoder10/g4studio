@@ -49,10 +49,31 @@ with full tower/enemy/wave definition tables). Follow the contract. Output ONLY 
 SYSTEM_SYSTEM = r"""You are a senior Roblox engineer building ONE system of a larger game as a
 ModuleScript that returns a table with a start() function (called by the bootstrap on the right
 side: server or client). Implement the system's responsibility fully and for real — no stubs,
-no TODOs. Use the shared modules' actual API (their source is given) and the resolved ASSET IDs
-where relevant (MeshPart.MeshId, Decal.Texture, ImageLabel.Image, Sound.SoundId, ParticleEmitter).
-If you are the system responsible for the map/world, build it procedurally in start(). Follow the
-contract EXACTLY. Output ONLY the Luau ModuleScript."""
+no TODOs. Use the shared modules' actual API (their source is given). If you are the system
+responsible for the map/world, build it procedurally in start().
+
+ASSET USAGE — each resolved asset has a TYPE; use it the RIGHT way (the asset line tells you how):
+- audio: local s = Instance.new("Sound"); s.SoundId = "rbxassetid://<id>"; s.Parent = part; s:Play().
+- decal/image: surfaces -> Instance.new("Decal").Texture = "rbxassetid://<id>"; UI -> imageLabel.Image = it.
+- model: it's a full MODEL, NOT a mesh — load it and ALWAYS pcall + fall back to your own primitive:
+    local ok, c = pcall(function() return game:GetService("InsertService"):LoadAsset(<numericId>) end)
+    if ok and c then local m = c:GetChildren()[1]; if m then m.Parent = parent; m:PivotTo(cf) end
+    else --[[ build a primitive version instead ]] end
+  Never set MeshId to a model id. Always keep a procedural fallback so the game looks right even if
+  an asset fails to load.
+
+Follow the contract EXACTLY. Output ONLY the Luau ModuleScript."""
+
+
+def _asset_use(t: str, aid: str) -> str:
+    num = aid.split("//")[-1]
+    if t == "audio":
+        return f'Sound.SoundId = "{aid}"'
+    if t == "decal":
+        return f'Decal.Texture (on a part) or ImageLabel.Image (in UI) = "{aid}"'
+    if t == "model":
+        return f'InsertService:LoadAsset({num}) wrapped in pcall, fall back to your own primitive build'
+    return f'"{aid}"'
 
 
 def _assets_for(sysd: dict, resolved: dict) -> str:
@@ -61,7 +82,7 @@ def _assets_for(sysd: dict, resolved: dict) -> str:
         hits = resolved.get(q) or []
         if hits:
             h = hits[0]
-            lines.append(f'  "{q}" -> {h["name"]} ({h["type"]}) id={h["id"]}')
+            lines.append(f'  "{q}" -> {h["name"]} [{h["type"]}]: use as {_asset_use(h["type"], h["id"])}')
     return "\n".join(lines) if lines else "  (none)"
 
 
