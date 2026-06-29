@@ -227,10 +227,23 @@ function SO101:solveTo(worldTarget: Vector3)
     if dist > 8.4 then worldTarget = sh + d0 * (8.4 / dist)
     elseif dist > 1e-3 and dist < 2.6 then worldTarget = sh + d0 * (2.6 / dist) end
 
-    local lo, hi = {}, {}
-    for c = 1, 4 do lo[c] = math.rad(SO101.CHAIN[c].lo); hi[c] = math.rad(SO101.CHAIN[c].hi) end
-    local q = { math.rad(self.targets[1]), math.rad(self.targets[2]), math.rad(self.targets[3]), math.rad(self.targets[4]) }
+    -- PAN (joint 1): rotate the base to FACE the target — one analytic step, smoothed by step(), so
+    -- the base swings around cleanly instead of the IK thrashing it.
+    do
+        local pv = self.linkCF[1].Position
+        local axisW = self.linkCF[1]:VectorToWorldSpace(SO101.CHAIN[1].axis).Unit
+        local toTip = self.tip.Position - pv; toTip = toTip - axisW * toTip:Dot(axisW)
+        local toTgt = worldTarget - pv; toTgt = toTgt - axisW * toTgt:Dot(axisW)
+        if toTip.Magnitude > 0.4 and toTgt.Magnitude > 0.4 then
+            local ang = math.deg(math.atan2(toTip:Cross(toTgt):Dot(axisW), toTip:Dot(toTgt)))
+            self.targets[1] = math.clamp(self.targets[1] + ang, SO101.CHAIN[1].lo, SO101.CHAIN[1].hi)
+        end
+    end
 
+    -- REACH (joints 2,3,4): DLS + null-space posture + limit clamp, with joint 1 fixed at its pan.
+    local lo, hi = {}, {}
+    for c = 2, 4 do lo[c] = math.rad(SO101.CHAIN[c].lo); hi[c] = math.rad(SO101.CHAIN[c].hi) end
+    local q = { math.rad(self.targets[1]), math.rad(self.targets[2]), math.rad(self.targets[3]), math.rad(self.targets[4]) }
     for _ = 1, IK_ITERS do
         local a = { math.deg(q[1]), math.deg(q[2]), math.deg(q[3]), math.deg(q[4]), self.targets[5], self.angles[6] }
         local F, tip = fkFrames(self.base, a)
@@ -238,22 +251,15 @@ function SO101:solveTo(worldTarget: Vector3)
         local em = e.Magnitude
         if em < IK_TOL then break end
         if em > IK_STEP then e = e * (IK_STEP / em) end
-
-        -- Jacobian columns (per radian): Jc[c] = axis_c × (tip - pivot_c)
-        local Jc = table.create(4)
-        for c = 1, 4 do
+        local Jc = {}
+        for c = 2, 4 do
             local fr = F[c]
             Jc[c] = fr:VectorToWorldSpace(SO101.CHAIN[c].axis):Cross(tip - fr.Position)
         end
-        local z = {
-            math.rad(IK_REST[1]) - q[1], math.rad(IK_REST[2]) - q[2],
-            math.rad(IK_REST[3]) - q[3], math.rad(IK_REST[4]) - q[4],
-        }
-        -- DLS (dq = Jᵀ(JJᵀ+λ²I)^-1 e) + null-space posture, over the current column set. A zeroed
-        -- column drops that joint from the position solve but still eases it toward rest.
+        local z = { 0, math.rad(IK_REST[2]) - q[2], math.rad(IK_REST[3]) - q[3], math.rad(IK_REST[4]) - q[4] }
         local function solveDq(): { number }?
             local M = { IK_LAMBDA2, 0, 0, 0, IK_LAMBDA2, 0, 0, 0, IK_LAMBDA2 }
-            for c = 1, 4 do
+            for c = 2, 4 do
                 local j = Jc[c]
                 M[1] += j.X * j.X; M[2] += j.X * j.Y; M[3] += j.X * j.Z
                 M[5] += j.Y * j.Y; M[6] += j.Y * j.Z; M[9] += j.Z * j.Z
@@ -262,27 +268,22 @@ function SO101:solveTo(worldTarget: Vector3)
             local Mi = inv3(M)
             if not Mi then return nil end
             local y = mul3(Mi, e)
-            local zc = Jc[1] * z[1] + Jc[2] * z[2] + Jc[3] * z[3] + Jc[4] * z[4]
-            local dq = table.create(4)
-            for c = 1, 4 do
-                dq[c] = Jc[c]:Dot(y) + IK_POSTURE * (z[c] - mul3(Mi, Jc[c]):Dot(zc))
-            end
+            local zc = Jc[2] * z[2] + Jc[3] * z[3] + Jc[4] * z[4]
+            local dq = { 0, 0, 0, 0 }
+            for c = 2, 4 do dq[c] = Jc[c]:Dot(y) + IK_POSTURE * (z[c] - mul3(Mi, Jc[c]):Dot(zc)) end
             return dq
         end
-
         local dq = solveDq()
         if not dq then break end
-        -- joint-limit clamping: drop joints the step would push past a limit, re-solve so the
-        -- others compensate (stops the arm jamming a joint at its limit and refusing to reach)
         local dropped = false
-        for c = 1, 4 do
+        for c = 2, 4 do
             local nv = q[c] + dq[c]
             if nv < lo[c] or nv > hi[c] then Jc[c] = Vector3.zero; dropped = true end
         end
         if dropped then dq = solveDq() or dq end
-        for c = 1, 4 do q[c] = math.clamp(q[c] + dq[c], lo[c], hi[c]) end
+        for c = 2, 4 do q[c] = math.clamp(q[c] + dq[c], lo[c], hi[c]) end
     end
-    for i = 1, 4 do self.targets[i] = math.deg(q[i]) end
+    for i = 2, 4 do self.targets[i] = math.deg(q[i]) end
 end
 
 function SO101:setTarget(i: number, deg: number)

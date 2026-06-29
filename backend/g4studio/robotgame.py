@@ -33,6 +33,9 @@ You get a `ctx` with:
   pour / stamp detection. This makes the EASIEST games (no grabbing required).
 - EASY by default: prefer ONE held tool + ONE simple action; use generous distance thresholds
   (>= 2 studs); win fast. Avoid precise stacking / strict order unless asked.
+- LOOK GOOD: make manipulated objects BIG (size 1.5-2.5). Put a raised PAD/basin (ctx.spawnBin)
+  under each source and target so the layout is clean and SEPARATED (e.g. source on the LEFT,
+  target on the RIGHT of ctx.region.center). Keep everything within ctx.region.reach.
 - ctx.hud(text) : the big top text. Keep it SHORT and CRYSTAL CLEAR — say exactly what to do right
   now + progress, e.g. "Grab the RED block -> drop it in the RED bin   (2 left)". Call it in setup
   AND whenever the goal changes (next item, score, time).
@@ -96,19 +99,23 @@ DIRECTOR_SYSTEM = (
 # Easy mechanics are PICKED IN CODE (the model only themes them) — the model's untamable bias toward
 # precise stacking games means free-form invention isn't reliably easy.
 MECHANICS = [
-    "SCOOP & POUR: the arm STARTS holding a bucket (ctx.attachTool({...}, CFrame.new(0,-1.3,0))). "
-    "Dip the bucket into a blue 'source' zone to fill it (recolor it + burst), then move it over a "
-    "target zone to pour. Win on pour. No grabbing.",
-    "SWEEP: the arm STARTS holding a flat paddle (ctx.attachTool). Spawn 3-4 loose balls; push them "
-    "into one BIG glowing zone. Win when all are inside (dist < 2.5). No grabbing.",
-    "STAMP: the arm STARTS holding a stamp (ctx.attachTool). Spawn 3 glowing marks on the table; "
-    "bring the stamp within ~2 studs of each to stamp it (burst + mark it done). Win when all stamped.",
-    "DUNK: the arm STARTS holding an item (ctx.attachTool). Dip it into a pot zone (dist < 2.2), then "
-    "lift it back above a height line. Win on lift-after-dunk. No grabbing.",
-    "PUSH: one block sits on the table; nudge/push it (NO grabbing, just bump the gripper into it) "
-    "into a BIG glowing zone (dist < 2.5). Win when it's inside.",
-    "DROP-IN-BUCKET: spawn ONE ball (ctx.spawnCube); pick it up and drop it into a BIG bucket "
-    "(spawnBin, generous). Win on drop-in (dist < 2.5).",
+    "SCOOP & POUR: the arm STARTS holding a BIG bucket (ctx.attachTool, size ~2, CFrame.new(0,-1.4,0)). "
+    "Put a large blue 'source' basin (spawnBin, size ~Vector3.new(4,1,4)) on the LEFT and a 'target' "
+    "basin on the RIGHT. Dip the bucket in the source to fill it (recolor + burst), carry it right and "
+    "pour. Win on pour. No grabbing.",
+    "SWEEP: the arm STARTS holding a WIDE paddle (ctx.attachTool, ~Vector3.new(3,0.4,1)). Spawn 3-4 BIG "
+    "balls (size ~1.8) in the middle; sweep them into ONE big glowing goal zone on one side (spawnBin "
+    "~5x5). Win when all are inside (dist < 2.6). No grabbing.",
+    "STAMP: the arm STARTS holding a stamp (ctx.attachTool). Spawn 3 BIG glowing pads (spawnBin, size "
+    "~Vector3.new(2.5,0.4,2.5)) spread across the zone; bring the stamp within ~2 studs of each to "
+    "light it (burst + recolor). Win when all lit.",
+    "DUNK: the arm STARTS holding an item (ctx.attachTool, size ~1.6). Dip it into a big pot basin on "
+    "one side (spawnBin ~4x4, dist < 2.4), then lift it back up. Win on lift-after-dunk. No grabbing.",
+    "PUSH: one BIG block (ctx.spawnCube, size ~2.2) on a source pad (LEFT); nudge it (NO grabbing, "
+    "just bump it) across into a big glowing goal zone on the RIGHT (spawnBin ~5x5). Win when inside.",
+    "DROP-IN-BUCKET: a raised source pad (spawnBin) on the LEFT holds ONE BIG coin/ball (ctx.spawnCube "
+    "size ~2 on top of it); pick it up and drop it into a BIG bucket on a SEPARATE target pad on the "
+    "RIGHT. Win on drop-in (dist < 2.6).",
 ]
 
 CODER_SYSTEM = (
