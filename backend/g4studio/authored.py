@@ -55,15 +55,19 @@ ROBUSTNESS (avoid runtime errors): only use REAL Roblox Enums/API; never index a
 (use FindFirstChild and the character's HumanoidRootPart, not PrimaryPart); never loop without a wait.
 Make it a real, lively, atmospheric game with a clear objective. Output ONLY the three parts."""
 
-QA_SYSTEM = r"""You are a senior Roblox engineer doing strict code review on a 3-part Roblox game
-(BUILD / SERVER / CLIENT). Find and FIX every bug WITHOUT changing the game's design or content:
-- invalid Enum members (Font/Material/PartType/etc. that don't exist) -> use real ones
-- indexing a possibly-nil value (e.g. character.PrimaryPart, FindFirstChild results) -> guard it
-- loops with no task.wait (would freeze) -> add a wait
-- undefined variables, wrong API names/signatures, bad parenting or ordering
-- anything that would error at runtime
-Keep ALL world-building and gameplay exactly. KEEP the `-- TITLE:` line and the
-`-- ===== BUILD/SERVER/CLIENT =====` markers. Output ONLY the corrected three-part script."""
+QA_SYSTEM = r"""You are a senior Roblox engineer reviewing a 3-part Roblox game (BUILD / SERVER /
+CLIENT) written to fulfill a player's request, which you are given. Two jobs:
+1) Make sure it actually DELIVERS the requested game — the objective, the core mechanics, and the
+   win/lose all match what was asked, and nothing important is missing or contradicts it. Use your
+   judgment about what THIS game needs; the checklist below is guidance, not rigid rules that apply
+   to every game.
+2) Fix bugs that would break it at runtime:
+   - invalid Enum members (Font/Material/PartType/etc. that don't exist) -> use real ones
+   - indexing a possibly-nil value (e.g. character.PrimaryPart, FindFirstChild results) -> guard it
+   - loops with no task.wait (would freeze) -> add a wait
+   - undefined variables, wrong API names/signatures, bad parenting or ordering, anything that errors
+Keep the design and content. KEEP the `-- TITLE:` line and the `-- ===== BUILD/SERVER/CLIENT =====`
+markers. Output ONLY the corrected three-part script."""
 
 API_REPAIR_SYSTEM = r"""You are fixing a Luau script. Replace ONLY the invalid Roblox API usages listed
 below with correct, real members that fit the intent (e.g. a rock should use Slate or Basalt). Change
@@ -129,8 +133,10 @@ async def run_authored(prompt: str, client: CerebrasClient, on_event=None,
             detail=f"{raw.count(chr(10)) + 1} lines · {round(ct.tokens_per_sec)} tok/s")
 
     emit_ev(on_event, "agent", id="qa", role="QA", name="Reviewer", status="working")
-    qt = await client.chat([{"role": "system", "content": QA_SYSTEM},
-                            {"role": "user", "content": raw}], max_tokens=16000, temperature=0.2)
+    qt = await client.chat(
+        [{"role": "system", "content": QA_SYSTEM},
+         {"role": "user", "content": f"The player requested:\n{prompt}\n\nReview this 3-part script:\n{raw}"}],
+        max_tokens=16000, temperature=0.2)
     turns.append(qt)
     fixed = qt.text or ""
     if len(fixed) < 200:
