@@ -16,7 +16,7 @@ local AssetService = game:GetService("AssetService")
 local CollectionService = game:GetService("CollectionService")
 
 -- Real geometry (imported MeshIds). USE_MESHES=false -> primitive blocks.
-SO101.USE_MESHES = true
+SO101.USE_MESHES = false  -- meshes need the one-time visual alignment; skeleton works now
 SO101.MESH_SCALE = 0.033  -- studs per mm
 SO101.MESHES = {
 	base = "rbxassetid://83418669346877",       -- Base_SO101
@@ -97,17 +97,20 @@ function SO101.new(parent: Instance, baseCFrame: CFrame?)
 	self.model = model
 	local grey = Color3.fromRGB(60, 64, 70)
 
-	-- base link mesh (root, before joint 1)
-	self.baseSkin = meshSkin("base", model)
-	if not self.baseSkin then self.baseParts = { part("Base", Vector3.new(2.4, 2, 2.4), grey, model) } end
-
-	-- one skin (or fallback block) per chain link that wears a mesh
-	self.skin = {}
-	self.block = {}
-	for i, j in ipairs(SO101.CHAIN) do
-		if j.mesh then
-			self.skin[i] = meshSkin(j.mesh, model)
-			if not self.skin[i] then self.block[i] = part("L" .. i, Vector3.new(1, 1, 3), grey, model) end
+	-- geometry: real meshes (USE_MESHES) draped on the true link frames, else a clean skeleton
+	self.skin, self.rods, self.balls = {}, {}, {}
+	local steel, acc = Color3.fromRGB(74, 80, 92), Color3.fromRGB(86, 156, 255)
+	if SO101.USE_MESHES then
+		self.baseSkin = meshSkin("base", model)
+		for i, j in ipairs(SO101.CHAIN) do
+			if j.mesh then self.skin[i] = meshSkin(j.mesh, model) end
+		end
+	end
+	if not self.baseSkin then  -- skeleton (rods between the URDF joints + a ball at each joint)
+		for i = 0, SO101.N do
+			local b = part("J" .. i, Vector3.new(0.95, 0.95, 0.95), acc, model); b.Shape = Enum.PartType.Ball
+			self.balls[i] = b
+			if i >= 1 then self.rods[i] = part("Rod" .. i, Vector3.new(0.5, 0.5, 1), steel, model) end
 		end
 	end
 	self.tip = part("Tip", Vector3.new(0.3, 0.3, 0.3), Color3.fromRGB(255, 80, 80), model)
@@ -119,17 +122,30 @@ end
 
 -- forward kinematics: walk the URDF chain, place link frames + meshes, compute the tip
 function SO101:_fk()
-	local cf = self.base * UPFIX
-	if self.baseSkin then self.baseSkin.CFrame = cf * SO101.MESH_OFFSET.base
-	elseif self.baseParts then self.baseParts[1].CFrame = cf end
+	local root = self.base * UPFIX
+	local cf = root
+	if self.baseSkin then self.baseSkin.CFrame = root * SO101.MESH_OFFSET.base end
 	for i, j in ipairs(SO101.CHAIN) do
 		local origin = CFrame.new(j.pos) * rpy(j.rpy[1], j.rpy[2], j.rpy[3])
 		cf = cf * origin * CFrame.fromAxisAngle(j.axis, math.rad(self.angles[i]))
 		self.linkCF[i] = cf
 		if self.skin[i] and j.mesh then
 			self.skin[i].CFrame = cf * (SO101.MESH_OFFSET[j.mesh] or CFrame.identity)
-		elseif self.block[i] then
-			self.block[i].CFrame = cf
+		end
+	end
+	-- skeleton: a rod between consecutive joints + a ball at each joint
+	if self.balls[0] then
+		local prev = root.Position
+		self.balls[0].CFrame = CFrame.new(prev)
+		for i = 1, SO101.N do
+			local p = self.linkCF[i].Position
+			local len = (p - prev).Magnitude
+			if self.rods[i] and len > 0.05 then
+				self.rods[i].Size = Vector3.new(0.45, 0.45, len)
+				self.rods[i].CFrame = CFrame.lookAt((prev + p) / 2, p)
+			end
+			self.balls[i].CFrame = CFrame.new(p)
+			prev = p
 		end
 	end
 	self.tip.CFrame = self.linkCF[5] * TIP_OFFSET  -- gripper_frame TCP (after wrist_roll)
