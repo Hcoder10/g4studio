@@ -63,9 +63,9 @@ async def run_polish_qa(prompt: str, spec: dict, modules: list[dict], client: Ce
         t = await client.chat([{"role": "system", "content": POLISH_FIX_SYSTEM},
                                {"role": "user", "content": user}], max_tokens=12000, temperature=0.45)
         emit_ev(on_event, "agent", id=aid, status="done", detail="polished")
-        return f["module"], _force_fix(_strip_fences(t.text or ""))
+        return m["name"], _force_fix(_strip_fences(t.text or ""))
 
     for r in await asyncio.gather(*[fix_one(f) for f in fixes], return_exceptions=True):
-        if isinstance(r, tuple) and len(r[1]) > 100:
+        if isinstance(r, tuple) and r[0] in by_name and len(r[1]) > 100:
             by_name[r[0]]["source"] = r[1]
     return modules

@@ -106,6 +106,6 @@ async def run_lint_repair(modules: list[dict], client, on_event=None) -> list[di
 
         for res in await asyncio.gather(*[fix(mn, d) for mn, d in by_mod.items()],
                                         return_exceptions=True):
-            if isinstance(res, tuple) and len(res[1]) > 100:
+            if isinstance(res, tuple) and res[0] in by_name and len(res[1]) > 100:
                 by_name[res[0]]["source"] = res[1]
     return modules
