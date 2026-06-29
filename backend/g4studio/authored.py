@@ -43,17 +43,33 @@ procedurally, with helper functions + loops/math so it's coherent and lively:
 - Parent everything under a Folder "G4Game" in Workspace, grouped in subfolders.
 - Set lighting/atmosphere to fit the theme (game.Lighting: ClockTime, Ambient, FogColor/FogEnd, an Atmosphere).
 
-SERVER (a Script in ServerScriptService that runs at game runtime). leaderstats; Touched /
-ClickDetector handlers; timers via task.spawn(function() while ... task.wait(t) end end); clear
-win/lose. Handle Players.PlayerAdded AND Players:GetPlayers(). It references the built world via
-workspace:WaitForChild("G4Game").
+SERVER (a Script in ServerScriptService, runs at game runtime). Implement the COMPLETE game the
+player asked for, COHESIVELY — you can see everything here, so make the parts actually work together.
+If the game needs several systems (a lobby/intermission, waves/rounds, an economy/shop, enemies AND
+the things that fight them, scoring), build them ALL in this one script so they share state directly:
+- Build every MOVING/INTERACTIVE entity (enemies, mobs, projectiles, NPCs, pickups) from PRIMITIVES
+  and SET model.PrimaryPart to a Part named "HumanoidRootPart" — NEVER from a loaded model asset
+  (LoadAsset models have no PrimaryPart and break movement). Move them via PrimaryPart.CFrame each step.
+- ONE source of truth for shared values: per-player via player:SetAttribute("Gold"/"Score"); global
+  via workspace:SetAttribute("Wave"/"BaseHealth"/"State"). (The CLIENT reads these directly.)
+- Reference the SAME path/positions the BUILD made (store the enemy path as a Folder of waypoint
+  parts, or attributes the BUILD set) via workspace:WaitForChild("G4Game"); enemies and towers MUST
+  use the same coordinates.
+- A clear win AND lose condition that actually FIRES; reward the player's main action; loops use task.wait.
+- GAME FEEL on every key moment: a Sound, a ParticleEmitter:Emit() burst, a tween.
 
-CLIENT (a LocalScript in StarterPlayerScripts that runs on each client at runtime). UI/HUD, local
-effects, camera, input. Use local player = game.Players.LocalPlayer and player:WaitForChild("PlayerGui").
+CLIENT (a LocalScript in StarterPlayerScripts, runs on each client). The WHOLE player-facing layer:
+- a clean HUD that READS the server's attributes (player:GetAttribute + player:GetAttributeChangedSignal,
+  workspace:GetAttributeChangedSignal) — show gold/score/wave/health and the objective;
+- input/placement (mouse, UserInputService) firing RemoteEvents to the server;
+- local juice: hit/pickup sounds, particle bursts, TweenService UI animation, floating damage/gold
+  popups (a BillboardGui adornee'd to the thing), and a real victory/defeat screen with payoff.
+- Use local player = game.Players.LocalPlayer, player:WaitForChild("PlayerGui").
 
-ROBUSTNESS (avoid runtime errors): only use REAL Roblox Enums/API; never index a possibly-nil value
-(use FindFirstChild and the character's HumanoidRootPart, not PrimaryPart); never loop without a wait.
-Make it a real, lively, atmospheric game with a clear objective. Output ONLY the three parts."""
+ROBUSTNESS: only REAL Roblox Enums/API; never index a possibly-nil value (FindFirstChild / nil-check;
+the character's HumanoidRootPart, not PrimaryPart); never loop without task.wait; RemoteEvents live in
+ReplicatedStorage — the SERVER creates them, the CLIENT WaitForChild's them.
+Make it a COMPLETE, lively, FUN game with clear feedback. Output ONLY the three parts."""
 
 QA_SYSTEM = r"""You are a senior Roblox engineer reviewing a 3-part Roblox game (BUILD / SERVER /
 CLIENT) written to fulfill a player's request, which you are given. Two jobs:

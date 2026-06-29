@@ -383,8 +383,10 @@ async def generate_game(prompt: str, client: Optional[CerebrasClient] = None,
         if force_genre in ("obby", "simulator", "custom", "segmented", "authored"):
             genre = force_genre
         else:
-            # auto-route: multi-system games -> segmented harness; single-scene -> authored
-            genre = "segmented" if await classify_complexity(client, prompt) == "complex" else "authored"
+            # DEFAULT = cohesive authored (one author writes the whole game -> the parts actually
+            # work together + vision map QA on the built world). Fragmented "segmented" is opt-in;
+            # it produced incoherent games (towers/enemies/UI in separate files disagreeing).
+            genre = "authored"
         _emit(on_event, "genre", genre=genre)
 
         if genre == "segmented":
