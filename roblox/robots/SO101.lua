@@ -21,24 +21,24 @@ local CollectionService = game:GetService("CollectionService")
 -- offset is baked in SO101.MESH_OFFSET below. No manual alignment.
 SO101.USE_MESHES = true
 SO101.MESHES = {  -- baked per-link meshes (roblox/robots/meshes/link_obj/<key>.obj)
-	base = "rbxassetid://95596397903989",
-	shoulder = "rbxassetid://100111761721607",
-	upper = "rbxassetid://125188763339649",
-	fore = "rbxassetid://111821043840824",
-	wrist = "rbxassetid://133675858855321",
-	gripperhub = "rbxassetid://94518968409146",
-	jaw = "rbxassetid://81908923863369",
+    base = "rbxassetid://95596397903989",
+    shoulder = "rbxassetid://100111761721607",
+    upper = "rbxassetid://125188763339649",
+    fore = "rbxassetid://111821043840824",
+    wrist = "rbxassetid://133675858855321",
+    gripperhub = "rbxassetid://94518968409146",
+    jaw = "rbxassetid://81908923863369",
 }
 
 -- exact chain from the URDF (studs). Each entry: joint origin (pos + rpy) relative to the parent
 -- link, rotation axis, limits (deg), and which mesh the child link wears.
 SO101.CHAIN = {
-	{ name = "shoulder_pan", pos = Vector3.new(1.2816, -0.0000, 2.0592), rpy = { 3.141590, 0.000000, -3.141590 }, axis = Vector3.new(0, 0, 1), lo = -110.0, hi = 110.0, mesh = "shoulder" },
-	{ name = "shoulder_lift", pos = Vector3.new(-1.0032, -0.6032, -1.7886), rpy = { -1.570800, -1.570800, 0.000000 }, axis = Vector3.new(0, 0, 1), lo = -100.0, hi = 100.0, mesh = "upper" },
-	{ name = "elbow_flex", pos = Vector3.new(-3.7148, -0.9240, 0.0000), rpy = { -0.000000, 0.000000, 1.570800 }, axis = Vector3.new(0, 0, 1), lo = -96.8, hi = 96.8, mesh = "fore" },
-	{ name = "wrist_flex", pos = Vector3.new(-4.4517, 0.1716, 0.0000), rpy = { 0.000000, 0.000000, -1.570800 }, axis = Vector3.new(0, 0, 1), lo = -95.0, hi = 95.0, mesh = "wrist" },
-	{ name = "wrist_roll", pos = Vector3.new(0.0000, -2.0163, 0.5973), rpy = { 1.570800, 0.048680, 3.141590 }, axis = Vector3.new(0, 0, 1), lo = -157.2, hi = 162.8, mesh = "gripperhub" },
-	{ name = "gripper", pos = Vector3.new(0.6666, 0.6204, -0.7722), rpy = { 1.570800, -0.000000, -0.000000 }, axis = Vector3.new(0, 0, 1), lo = -10.0, hi = 100.0, mesh = "jaw" },
+    { name = "shoulder_pan", pos = Vector3.new(1.2816, -0.0000, 2.0592), rpy = { 3.141590, 0.000000, -3.141590 }, axis = Vector3.new(0, 0, 1), lo = -110.0, hi = 110.0, mesh = "shoulder" },
+    { name = "shoulder_lift", pos = Vector3.new(-1.0032, -0.6032, -1.7886), rpy = { -1.570800, -1.570800, 0.000000 }, axis = Vector3.new(0, 0, 1), lo = -100.0, hi = 100.0, mesh = "upper" },
+    { name = "elbow_flex", pos = Vector3.new(-3.7148, -0.9240, 0.0000), rpy = { -0.000000, 0.000000, 1.570800 }, axis = Vector3.new(0, 0, 1), lo = -96.8, hi = 96.8, mesh = "fore" },
+    { name = "wrist_flex", pos = Vector3.new(-4.4517, 0.1716, 0.0000), rpy = { 0.000000, 0.000000, -1.570800 }, axis = Vector3.new(0, 0, 1), lo = -95.0, hi = 95.0, mesh = "wrist" },
+    { name = "wrist_roll", pos = Vector3.new(0.0000, -2.0163, 0.5973), rpy = { 1.570800, 0.048680, 3.141590 }, axis = Vector3.new(0, 0, 1), lo = -157.2, hi = 162.8, mesh = "gripperhub" },
+    { name = "gripper", pos = Vector3.new(0.6666, 0.6204, -0.7722), rpy = { 1.570800, -0.000000, -0.000000 }, axis = Vector3.new(0, 0, 1), lo = -10.0, hi = 100.0, mesh = "jaw" },
 }
 SO101.N = #SO101.CHAIN
 SO101.SPEED_DEG = 200
@@ -50,180 +50,205 @@ local TIP_OFFSET = CFrame.new(-0.2607, -0.0072, -3.2380) * CFrame.Angles(0, math
 -- exact post-recenter offset per baked link mesh (= bbox center of the baked geometry, in studs).
 -- skin.CFrame = linkCF * MESH_OFFSET so geometry point q renders at linkCF*q. Computed, not guessed.
 SO101.MESH_OFFSET = {
-	base = CFrame.new(0.5553, 0.0000, 1.1089),
-	shoulder = CFrame.new(-0.6336, 0.0383, -0.3003),
-	upper = CFrame.new(-1.9498, -0.4323, 0.6649),
-	fore = CFrame.new(-2.1960, 0.1139, 0.6665),
-	wrist = CFrame.new(-0.0716, -0.8882, 0.7309),
-	gripperhub = CFrame.new(-0.0792, -0.0660, -1.7067) * CFrame.Angles(0, 0, math.pi),  -- mesh imported 180 deg rolled
-	jaw = CFrame.new(-0.0380, -1.1881, 0.6237),
+    base = CFrame.new(0.5553, 0.0000, 1.1089),
+    shoulder = CFrame.new(-0.6336, 0.0383, -0.3003),
+    upper = CFrame.new(-1.9498, -0.4323, 0.6649),
+    fore = CFrame.new(-2.1960, 0.1139, 0.6665),
+    wrist = CFrame.new(-0.0716, -0.8882, 0.7309),
+    gripperhub = CFrame.new(-0.0792, -0.0660, -1.7067) * CFrame.Angles(0, math.pi, 0),
+    jaw = CFrame.new(-0.0380, -1.1881, 0.6237) * CFrame.Angles(0, math.pi, 0),
 }
+
+-- IK tuning
+local IK_ITERS = 8       -- CCD sweeps per solve
+local IK_DAMP = 0.6      -- fraction of each computed rotation applied (damps oscillation)
+local IK_TOL = 0.12      -- stop once the tip is within this many studs of the target
+local IK_SINGULAR = 0.12 -- ignore a joint whose lever arm to tip/target is shorter than this
 
 -- URDF rpy -> CFrame:  R = Rz(yaw) * Ry(pitch) * Rx(roll)
 local function rpy(r: number, p: number, y: number): CFrame
-	return CFrame.Angles(0, 0, y) * CFrame.Angles(0, p, 0) * CFrame.Angles(r, 0, 0)
+    return CFrame.Angles(0, 0, y) * CFrame.Angles(0, p, 0) * CFrame.Angles(r, 0, 0)
+end
+
+-- pure FK (no instances touched): returns the link frames + tip position for a joint-angle array.
+-- Used by the solver so it can evaluate trial poses without rendering 40x a frame.
+local function fkFrames(base: CFrame, angles: { number }): ({ CFrame }, Vector3)
+    local cf = base * UPFIX
+    local F = table.create(SO101.N)
+    for i = 1, SO101.N do
+        local j = SO101.CHAIN[i]
+        cf = cf * (CFrame.new(j.pos) * rpy(j.rpy[1], j.rpy[2], j.rpy[3])) * CFrame.fromAxisAngle(j.axis, math.rad(angles[i]))
+        F[i] = cf
+    end
+    return F, (F[5] * TIP_OFFSET).Position
 end
 
 local function part(name, size, color, parent)
-	local p = Instance.new("Part")
-	p.Name = name; p.Size = size; p.Color = color
-	p.Anchored = true; p.CanCollide = false; p.Material = Enum.Material.Metal
-	p.TopSurface = Enum.SurfaceType.Smooth; p.BottomSurface = Enum.SurfaceType.Smooth
-	p.Parent = parent
-	return p
+    local p = Instance.new("Part")
+    p.Name = name; p.Size = size; p.Color = color
+    p.Anchored = true; p.CanCollide = false; p.Material = Enum.Material.Metal
+    p.TopSurface = Enum.SurfaceType.Smooth; p.BottomSurface = Enum.SurfaceType.Smooth
+    p.Parent = parent
+    return p
 end
 
 local function meshSkin(key, parent)
-	local id = SO101.MESHES[key]
-	if not SO101.USE_MESHES or not id or id == "" then return nil end
-	local ok, mp = pcall(function()
-		return AssetService:CreateMeshPartAsync(id,
-			{ CollisionFidelity = Enum.CollisionFidelity.Box, RenderFidelity = Enum.RenderFidelity.Precise })
-	end)
-	if not ok or not mp then warn("[SO101] mesh load failed for '" .. key .. "': " .. tostring(mp)); return nil end
-	mp.Anchored = true; mp.CanCollide = false  -- imported pre-scaled to studs; keep native size
-	mp.Material = Enum.Material.SmoothPlastic; mp.Color = Color3.fromRGB(226, 174, 64)  -- SO-101 yellow
-	mp.Parent = parent
-	return mp
+    local id = SO101.MESHES[key]
+    if not SO101.USE_MESHES or not id or id == "" then return nil end
+    local ok, mp = pcall(function()
+        return AssetService:CreateMeshPartAsync(id,
+            { CollisionFidelity = Enum.CollisionFidelity.Box, RenderFidelity = Enum.RenderFidelity.Precise })
+    end)
+    if not ok or not mp then warn("[SO101] mesh load failed for '" .. key .. "': " .. tostring(mp)); return nil end
+    mp.Anchored = true; mp.CanCollide = false  -- imported pre-scaled to studs; keep native size
+    mp.Material = Enum.Material.SmoothPlastic; mp.Color = Color3.fromRGB(226, 174, 64)  -- SO-101 yellow
+    mp.Parent = parent
+    return mp
 end
 
 function SO101.new(parent: Instance, baseCFrame: CFrame?)
-	local self = setmetatable({}, SO101)
-	self.base = baseCFrame or CFrame.new(0, 3, 0)
-	self.angles = { 0, 0, 0, 0, 0, SO101.GRIP_OPEN }   -- joint angles (deg); joint 6 = gripper
-	self.targets = { 0, 0, 0, 0, 0, SO101.GRIP_OPEN }
-	self.gripper = 1                                    -- 0 closed .. 1 open
-	self.gripperTarget = 1
-	self.grasped = nil
-	self.linkCF = {}
+    local self = setmetatable({}, SO101)
+    self.base = baseCFrame or CFrame.new(0, 3, 0)
+    self.angles = { 0, 0, 0, 0, 0, SO101.GRIP_OPEN }   -- joint angles (deg); joint 6 = gripper
+    self.targets = { 0, 0, 0, 0, 0, SO101.GRIP_OPEN }
+    self.gripper = 1                                    -- 0 closed .. 1 open
+    self.gripperTarget = 1
+    self.grasped = nil
+    self.linkCF = {}
 
-	local model = Instance.new("Model"); model.Name = "SO101"; model.Parent = parent
-	self.model = model
-	local grey = Color3.fromRGB(60, 64, 70)
+    local model = Instance.new("Model"); model.Name = "SO101"; model.Parent = parent
+    self.model = model
+    local grey = Color3.fromRGB(60, 64, 70)
 
-	-- geometry: real meshes (USE_MESHES) draped on the true link frames, else a clean skeleton
-	self.skin, self.rods, self.balls = {}, {}, {}
-	local steel, acc = Color3.fromRGB(74, 80, 92), Color3.fromRGB(86, 156, 255)
-	if SO101.USE_MESHES then
-		self.baseSkin = meshSkin("base", model)
-		for i, j in ipairs(SO101.CHAIN) do
-			if j.mesh then self.skin[i] = meshSkin(j.mesh, model) end
-		end
-	end
-	if not self.baseSkin then  -- skeleton (rods between the URDF joints + a ball at each joint)
-		for i = 0, SO101.N do
-			local b = part("J" .. i, Vector3.new(0.95, 0.95, 0.95), acc, model); b.Shape = Enum.PartType.Ball
-			self.balls[i] = b
-			if i >= 1 then self.rods[i] = part("Rod" .. i, Vector3.new(0.5, 0.5, 1), steel, model) end
-		end
-	end
-	self.tip = part("Tip", Vector3.new(0.3, 0.3, 0.3), Color3.fromRGB(255, 80, 80), model)
-	self.tip.Transparency = 1
+    -- geometry: real meshes (USE_MESHES) draped on the true link frames, else a clean skeleton
+    self.skin, self.rods, self.balls = {}, {}, {}
+    local steel, acc = Color3.fromRGB(74, 80, 92), Color3.fromRGB(86, 156, 255)
+    if SO101.USE_MESHES then
+        self.baseSkin = meshSkin("base", model)
+        for i, j in ipairs(SO101.CHAIN) do
+            if j.mesh then self.skin[i] = meshSkin(j.mesh, model) end
+        end
+    end
+    if not self.baseSkin then  -- skeleton (rods between the URDF joints + a ball at each joint)
+        for i = 0, SO101.N do
+            local b = part("J" .. i, Vector3.new(0.95, 0.95, 0.95), acc, model); b.Shape = Enum.PartType.Ball
+            self.balls[i] = b
+            if i >= 1 then self.rods[i] = part("Rod" .. i, Vector3.new(0.5, 0.5, 1), steel, model) end
+        end
+    end
+    self.tip = part("Tip", Vector3.new(0.3, 0.3, 0.3), Color3.fromRGB(255, 80, 80), model)
+    self.tip.Transparency = 1
 
-	self:_fk()
-	return self
+    self:_fk()
+    return self
 end
 
 -- forward kinematics: walk the URDF chain, place link frames + meshes, compute the tip
 function SO101:_fk()
-	local root = self.base * UPFIX
-	local cf = root
-	if self.baseSkin then self.baseSkin.CFrame = root * SO101.MESH_OFFSET.base end
-	for i, j in ipairs(SO101.CHAIN) do
-		local origin = CFrame.new(j.pos) * rpy(j.rpy[1], j.rpy[2], j.rpy[3])
-		cf = cf * origin * CFrame.fromAxisAngle(j.axis, math.rad(self.angles[i]))
-		self.linkCF[i] = cf
-		if self.skin[i] and j.mesh then
-			self.skin[i].CFrame = cf * (SO101.MESH_OFFSET[j.mesh] or CFrame.identity)
-		end
-	end
-	-- skeleton: a rod between consecutive joints + a ball at each joint
-	if self.balls[0] then
-		local prev = root.Position
-		self.balls[0].CFrame = CFrame.new(prev)
-		for i = 1, SO101.N do
-			local p = self.linkCF[i].Position
-			local len = (p - prev).Magnitude
-			if self.rods[i] and len > 0.05 then
-				self.rods[i].Size = Vector3.new(0.45, 0.45, len)
-				self.rods[i].CFrame = CFrame.lookAt((prev + p) / 2, p)
-			end
-			self.balls[i].CFrame = CFrame.new(p)
-			prev = p
-		end
-	end
-	self.tip.CFrame = self.linkCF[5] * TIP_OFFSET  -- gripper_frame TCP (after wrist_roll)
-	self.ee = self.tip.CFrame
+    local root = self.base * UPFIX
+    local cf = root
+    if self.baseSkin then self.baseSkin.CFrame = root * SO101.MESH_OFFSET.base end
+    for i, j in ipairs(SO101.CHAIN) do
+        local origin = CFrame.new(j.pos) * rpy(j.rpy[1], j.rpy[2], j.rpy[3])
+        cf = cf * origin * CFrame.fromAxisAngle(j.axis, math.rad(self.angles[i]))
+        self.linkCF[i] = cf
+        if self.skin[i] and j.mesh then
+            self.skin[i].CFrame = cf * (SO101.MESH_OFFSET[j.mesh] or CFrame.identity)
+        end
+    end
+    -- skeleton: a rod between consecutive joints + a ball at each joint
+    if self.balls[0] then
+        local prev = root.Position
+        self.balls[0].CFrame = CFrame.new(prev)
+        for i = 1, SO101.N do
+            local p = self.linkCF[i].Position
+            local len = (p - prev).Magnitude
+            if self.rods[i] and len > 0.05 then
+                self.rods[i].Size = Vector3.new(0.45, 0.45, len)
+                self.rods[i].CFrame = CFrame.lookAt((prev + p) / 2, p)
+            end
+            self.balls[i].CFrame = CFrame.new(p)
+            prev = p
+        end
+    end
+    self.tip.CFrame = self.linkCF[5] * TIP_OFFSET  -- gripper_frame TCP (after wrist_roll)
+    self.ee = self.tip.CFrame
 end
 
--- CCD inverse kinematics: aim the tip at a world point using joints 1..4
+-- CCD inverse kinematics: aim the tip at a world point using joints 1..4.
+-- Solves continuously from the current TARGETS (a persistent IK state), applies DAMPED steps and
+-- stops on convergence, then writes joint TARGETS — step() servo-limits the real motion, so the
+-- arm never jitters even near singular/extended poses.
 function SO101:solveTo(worldTarget: Vector3)
-	for _ = 1, 10 do
-		for i = 4, 1, -1 do
-			local pivot = self.linkCF[i].Position
-			local axisW = self.linkCF[i]:VectorToWorldSpace(SO101.CHAIN[i].axis).Unit
-			local toTip = self.tip.Position - pivot
-			local toTgt = worldTarget - pivot
-			toTip = toTip - axisW * toTip:Dot(axisW)
-			toTgt = toTgt - axisW * toTgt:Dot(axisW)
-			if toTip.Magnitude > 0.05 and toTgt.Magnitude > 0.05 then
-				local ang = math.atan2(toTip:Cross(toTgt):Dot(axisW), toTip:Dot(toTgt))
-				local nl = math.clamp(self.angles[i] + math.deg(ang), SO101.CHAIN[i].lo, SO101.CHAIN[i].hi)
-				self.angles[i] = nl; self.targets[i] = nl
-				self:_fk()
-			end
-		end
-	end
+    local a = { self.targets[1], self.targets[2], self.targets[3], self.targets[4], self.targets[5], self.angles[6] }
+    for _ = 1, IK_ITERS do
+        local _, tip = fkFrames(self.base, a)
+        if (tip - worldTarget).Magnitude < IK_TOL then break end  -- close enough; don't over-iterate
+        for i = 4, 1, -1 do
+            local F, t = fkFrames(self.base, a)
+            local pivot = F[i].Position
+            local axisW = F[i]:VectorToWorldSpace(SO101.CHAIN[i].axis).Unit
+            local toTip = t - pivot; toTip = toTip - axisW * toTip:Dot(axisW)
+            local toTgt = worldTarget - pivot; toTgt = toTgt - axisW * toTgt:Dot(axisW)
+            if toTip.Magnitude > IK_SINGULAR and toTgt.Magnitude > IK_SINGULAR then  -- skip near-axis (singular)
+                local ang = math.deg(math.atan2(toTip:Cross(toTgt):Dot(axisW), toTip:Dot(toTgt)))
+                a[i] = math.clamp(a[i] + ang * IK_DAMP, SO101.CHAIN[i].lo, SO101.CHAIN[i].hi)
+            end
+        end
+    end
+    for i = 1, 4 do self.targets[i] = a[i] end
 end
 
 function SO101:setTarget(i: number, deg: number)
-	self.targets[i] = math.clamp(deg, SO101.CHAIN[i].lo, SO101.CHAIN[i].hi)
+    self.targets[i] = math.clamp(deg, SO101.CHAIN[i].lo, SO101.CHAIN[i].hi)
 end
 
 function SO101:grip(open01: number)
-	self.gripperTarget = math.clamp(open01, 0, 1)
+    self.gripperTarget = math.clamp(open01, 0, 1)
 end
 
 function SO101:step(dt: number)
-	local maxStep = SO101.SPEED_DEG * dt
-	-- joints 1..4 are set directly by solveTo; smooth wrist_roll (5) toward its target
-	local err = self.targets[5] - self.angles[5]
-	self.angles[5] += math.clamp(err, -maxStep, maxStep)
-	-- gripper
-	self.gripper += math.clamp(self.gripperTarget - self.gripper, -3 * dt, 3 * dt)
-	self.angles[6] = SO101.GRIP_CLOSED + (SO101.GRIP_OPEN - SO101.GRIP_CLOSED) * self.gripper
-	self:_fk()
-	self:_updateGrasp()
+    local maxStep = SO101.SPEED_DEG * dt
+    -- servo-limit every arm joint toward its target -> smooth motion that filters any solver noise
+    for i = 1, 5 do
+        local err = self.targets[i] - self.angles[i]
+        self.angles[i] += math.clamp(err, -maxStep, maxStep)
+    end
+    -- gripper
+    self.gripper += math.clamp(self.gripperTarget - self.gripper, -3 * dt, 3 * dt)
+    self.angles[6] = SO101.GRIP_CLOSED + (SO101.GRIP_OPEN - SO101.GRIP_CLOSED) * self.gripper
+    self:_fk()
+    self:_updateGrasp()
 end
 
 function SO101:_updateGrasp()
-	if self.gripper < 0.35 and not self.grasped then
-		local best, bd = nil, 2.0
-		for _, obj in ipairs(CollectionService:GetTagged("Graspable")) do
-			if obj:IsA("BasePart") then
-				local d = (obj.Position - self.tip.Position).Magnitude
-				if d < bd then bd = d; best = obj end
-			end
-		end
-		if best then best.Anchored = true; self.grasped = best end
-	elseif self.gripper > 0.6 and self.grasped then
-		self.grasped.Anchored = false
-		self.grasped = nil
-	end
-	if self.grasped then self.grasped.CFrame = self.tip.CFrame end
+    if self.gripper < 0.35 and not self.grasped then
+        local best, bd = nil, 2.0
+        for _, obj in ipairs(CollectionService:GetTagged("Graspable")) do
+            if obj:IsA("BasePart") then
+                local d = (obj.Position - self.tip.Position).Magnitude
+                if d < bd then bd = d; best = obj end
+            end
+        end
+        if best then best.Anchored = true; self.grasped = best end
+    elseif self.gripper > 0.6 and self.grasped then
+        self.grasped.Anchored = false
+        self.grasped = nil
+    end
+    if self.grasped then self.grasped.CFrame = self.tip.CFrame end
 end
 
 function SO101:getObs()
-	return {
-		joints = { self.angles[1], self.angles[2], self.angles[3], self.angles[4], self.angles[5] },
-		gripper = self.gripper,
-		ee = { self.ee.Position.X, self.ee.Position.Y, self.ee.Position.Z },
-		holding = self.grasped ~= nil,
-	}
+    return {
+        joints = { self.angles[1], self.angles[2], self.angles[3], self.angles[4], self.angles[5] },
+        gripper = self.gripper,
+        ee = { self.ee.Position.X, self.ee.Position.Y, self.ee.Position.Z },
+        holding = self.grasped ~= nil,
+    }
 end
 
 function SO101:getEEPose(): CFrame
-	return self.ee
+    return self.ee
 end
 
 return SO101
