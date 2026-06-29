@@ -73,11 +73,19 @@ local function part(name, size, color, parent)
 	return p
 end
 
+local AssetService = game:GetService("AssetService")
+
 local function meshSkin(key: string, parent: Instance)
 	if not SO101.USE_MESHES or not SO101.MESHES[key] then return nil end
-	local mp = Instance.new("MeshPart")
-	local ok = pcall(function() mp.MeshId = SO101.MESHES[key] end)
-	if not ok then mp:Destroy(); return nil end  -- MeshId not assignable -> keep the primitive
+	-- CreateMeshPartAsync actually loads the mesh at runtime (MeshPart.MeshId is not assignable).
+	local ok, mp = pcall(function()
+		return AssetService:CreateMeshPartAsync(SO101.MESHES[key],
+			{ CollisionFidelity = Enum.CollisionFidelity.Box, RenderFidelity = Enum.RenderFidelity.Precise })
+	end)
+	if not ok or not mp then
+		warn("[SO101] mesh load failed for '" .. key .. "': " .. tostring(mp))
+		return nil
+	end
 	mp.Size = MESH_MM[key] * SO101.MESH_SCALE
 	mp.Anchored = true; mp.CanCollide = false
 	mp.Material = Enum.Material.SmoothPlastic; mp.Color = Color3.fromRGB(48, 51, 58)
