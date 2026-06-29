@@ -21,9 +21,9 @@ VO = [
     ("Robot learning needs demonstration data, and it's slow to collect. So we made collecting it a game.", 4.7),
     ("A faithful S O 101 arm, rebuilt from the official U R D F, with real inverse kinematics.", 11.2),
     ("Gemma 4, running on Cerebras, invents fun games where playing them is labeling the data.", 19.2),
-    ("Every playthrough becomes a labeled demonstration. 192 episodes, from real human play.", 25.8),
-    ("It's recorded in the arm's native joint space, and exported to LeRobot. And it's learnable: the policy recovers the actions almost perfectly.", 32.8),
-    ("Point it at any robot. One command derives the kinematics from a U R D F, in minutes.", 42.4),
+    ("Every playthrough is a labeled demonstration. Forty-two from real play, plus synthetic for scale, all in LeRobot format.", 25.8),
+    ("It's recorded in the arm's native joint space, and exported to LeRobot. Training-ready data, ready to drop into imitation learning.", 32.8),
+    ("Point it at any robot. Derive its kinematics from a U R D F in seconds, at ninety-three percent reach.", 42.4),
     ("G4 Studio. Play becomes the data that teaches robots.", 49.4),
 ]
 

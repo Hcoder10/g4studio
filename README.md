@@ -42,14 +42,18 @@ robot or the data pipeline.
 | **Self-extending curriculum** | Master a game (2-win streak) → Gemma forges a harder one in the same skill, hot-swapped at runtime via `loadstring`. |
 | **Structured task families** | 5 families (pick_place / sorting / stacking / insertion / kitting) with variation axes + a dedup registry. 3 stacking games came out distinct (taper / inverted-weight / thin-slab). |
 | **LeRobot-native data** | `observation.state` = joint angles, `action` = commanded joint targets; exports to LeRobot v2.1 (parquet + meta). |
-| **Learnability** | A behavior-cloning smoke test on 150 synth episodes (28k frames): test MSE **48× below** predict-mean baseline, per-joint **R² 0.94–1.0**. |
-| **Onboard any robot** | `onboard_robot.py <urdf>` auto-derives the chain + **auto-searches a rest pose** by reach. SO-101 → 93%, SO-100 → 100%, ~15s each. |
+| **Dataset** | **192 episodes / 73k frames**, all LeRobot v2.1 — **42 from real human play** across **13** Gemma-invented games, plus **150 synthetic** episodes for scale. |
+| **Learnability** | A behavior-cloning smoke test cleanly recovers the recorded policy (per-joint **R² 0.94–1.0**; on the synthetic set, **19× below** a tough predict-current-state baseline / 48× below predict-mean). The 42 human demos are the proof-of-loop seed. |
+| **Onboard any robot** | `onboard_robot.py <urdf>` auto-derives the chain + **auto-searches a rest pose** by reach, in seconds — generic to any URDF. Reproduced on the SO-101 → **93% forward-workspace reach**. |
 
 ## Honest limits
 
 - **Sim-to-real:** it's Roblox *kinematic* physics, not real dynamics. The data is validated as
   *learnable* and *correctly formatted* — not as zero-shot transferable. Treat it as sim
   pretraining / curriculum data.
+- **Data scale:** the 42 human-play episodes prove the play→data loop end-to-end; the headline
+  learnability numbers are on the synthetic set (a clean scripted policy). The human corpus is an
+  early seed, not yet a strongly learned skill on its own.
 - **IK coverage:** the 5-DOF arm can't reach every pose; games place objects in the reliable
   forward workcell (where the IK solves to ~0 error).
 - **Mesh upload** during onboarding is manual (Roblox's importer; no external tool can automate it).

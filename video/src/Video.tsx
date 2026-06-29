@@ -128,7 +128,7 @@ const Loop: React.FC = () => (
         Every playthrough is a<br /><span style={{ color: C.cyan, textShadow: glow(C.cyan, 12) }}>labeled demonstration.</span></div></Reveal>
       <Reveal delay={26} style={{ marginTop: 40 }}>
         <div style={{ display: "flex", gap: 40 }}>
-          {[["192", "episodes"], ["14", "games"], ["73k", "frames"]].map(([n, l]) => (
+          {[["42", "human demos"], ["150", "synthetic"], ["73k", "frames"]].map(([n, l]) => (
             <div key={l}>
               <div style={{ fontSize: 76, fontWeight: 900, color: C.blue, textShadow: glow(C.blue, 14) }}>{n}</div>
               <div style={{ fontSize: 24, color: C.dim, letterSpacing: 2 }}>{l.toUpperCase()}</div>
@@ -137,7 +137,7 @@ const Loop: React.FC = () => (
         </div>
       </Reveal>
       <Reveal delay={44}><div style={{ fontSize: 24, color: C.dim, marginTop: 30 }}>
-        from real human play — verified live on the server</div></Reveal>
+        13 Gemma-invented games · every frame exported to LeRobot v2.1</div></Reveal>
     </div>
     <Reveal delay={20} style={{ flex: 1 }}>
       <Img src={staticFile("dataset_bars.png")} style={{ width: "100%" }} />
@@ -159,11 +159,11 @@ const DataSci: React.FC = () => {
         </Reveal>
         <div style={{ flex: 1, opacity: interpolate(f, [40, 60], [0, 1], { extrapolateRight: "clamp" }) }}>
           <Img src={staticFile("bc_r2.png")} style={{ width: "100%" }} />
-          <div style={{ color: C.dim, fontSize: 22, textAlign: "center" }}>a behavior-cloning policy recovers the actions</div>
+          <div style={{ color: C.dim, fontSize: 22, textAlign: "center" }}>behavior cloning recovers the recorded policy</div>
         </div>
       </div>
       <Reveal delay={64}><div style={{ fontSize: 38, fontWeight: 800, color: C.cyan, textAlign: "center", textShadow: glow(C.cyan, 10) }}>
-        Learnable — R² 0.94–1.0, 48× better than baseline.</div></Reveal>
+        Training-ready — drop it straight into an imitation-learning pipeline.</div></Reveal>
     </AbsoluteFill>
   );
 };
@@ -180,11 +180,11 @@ const Generalize: React.FC = () => (
       <Reveal delay={22}><div style={{ fontSize: 30, color: C.dim, marginTop: 18, lineHeight: 1.4, maxWidth: 760 }}>
         One command derives the kinematics from a URDF and auto-finds a working pose.</div></Reveal>
       <Reveal delay={40} style={{ marginTop: 34, display: "flex", gap: 50 }}>
-        {[["SO-101", "93%"], ["SO-100", "100%"]].map(([n, r]) => (
+        {[["SO-101", "93%", "WORKSPACE REACH"], ["any URDF", "secs", "ONBOARD TIME"]].map(([n, r, l]) => (
           <div key={n}>
             <div style={{ fontSize: 30, color: C.ink, fontWeight: 700 }}>{n}</div>
             <div style={{ fontSize: 58, fontWeight: 900, color: C.mag, textShadow: glow(C.mag, 12) }}>{r}</div>
-            <div style={{ fontSize: 20, color: C.dim, letterSpacing: 2 }}>WORKSPACE REACH</div>
+            <div style={{ fontSize: 20, color: C.dim, letterSpacing: 2 }}>{l}</div>
           </div>
         ))}
       </Reveal>
