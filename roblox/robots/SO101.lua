@@ -49,21 +49,28 @@ local TIP_OFFSET = CFrame.new(-0.2607, -0.0072, -3.2380) * CFrame.Angles(0, math
 
 -- exact post-recenter offset per baked link mesh (= bbox center of the baked geometry, in studs).
 -- skin.CFrame = linkCF * MESH_OFFSET so geometry point q renders at linkCF*q. Computed, not guessed.
+-- NOTE: this is purely cosmetic (mesh placement); the kinematics/IK/tip never read it.
 SO101.MESH_OFFSET = {
-    base = CFrame.new(0.5553, 0.0000, 1.1089),
-    shoulder = CFrame.new(-0.6336, 0.0383, -0.3003),
-    upper = CFrame.new(-1.9498, -0.4323, 0.6649),
-    fore = CFrame.new(-2.1960, 0.1139, 0.6665),
-    wrist = CFrame.new(-0.0716, -0.8882, 0.7309),
+    base = CFrame.new(0.5553, 0.0000, 1.1089) * CFrame.Angles(0, math.pi, 0),
+    shoulder = CFrame.new(-0.6336, 0.0383, -0.3003) * CFrame.Angles(0, math.pi, 0),
+    upper = CFrame.new(-1.9498, -0.4323, 0.6649) * CFrame.Angles(0, math.pi, 0),
+    fore = CFrame.new(-2.1960, 0.1139, 0.6665) * CFrame.Angles(0, math.pi, 0),
+    wrist = CFrame.new(-0.0716, -0.8882, 0.7309) * CFrame.Angles(0, math.pi, 0),
     gripperhub = CFrame.new(-0.0792, -0.0660, -1.7067) * CFrame.Angles(0, math.pi, 0),
     jaw = CFrame.new(-0.0380, -1.1881, 0.6237) * CFrame.Angles(0, math.pi, 0),
 }
 
 -- IK tuning
-local IK_ITERS = 8       -- CCD sweeps per solve
+local IK_ITERS = 10      -- CCD sweeps per solve
 local IK_DAMP = 0.6      -- fraction of each computed rotation applied (damps oscillation)
 local IK_TOL = 0.12      -- stop once the tip is within this many studs of the target
 local IK_SINGULAR = 0.12 -- ignore a joint whose lever arm to tip/target is shorter than this
+-- posture bias: each iteration also pulls the redundant joints toward a natural "elbow-up,
+-- gripper-down" rest pose, so the solver resolves to a real configuration instead of folding the
+-- arm through itself. IK_REST = joint angles (deg) of that pose; IK_REST_W = how hard to pull.
+-- Tuning: if it folds the wrong way, flip the sign of the elbow entry (IK_REST[3]).
+local IK_REST = { 0, -50, 95, -45, 0 }
+local IK_REST_W = 0.08
 
 -- URDF rpy -> CFrame:  R = Rz(yaw) * Ry(pitch) * Rx(roll)
 local function rpy(r: number, p: number, y: number): CFrame
@@ -109,8 +116,9 @@ end
 function SO101.new(parent: Instance, baseCFrame: CFrame?)
     local self = setmetatable({}, SO101)
     self.base = baseCFrame or CFrame.new(0, 3, 0)
-    self.angles = { 0, 0, 0, 0, 0, SO101.GRIP_OPEN }   -- joint angles (deg); joint 6 = gripper
-    self.targets = { 0, 0, 0, 0, 0, SO101.GRIP_OPEN }
+    -- start in the natural rest pose so it never opens in a folded configuration
+    self.angles = { IK_REST[1], IK_REST[2], IK_REST[3], IK_REST[4], IK_REST[5], SO101.GRIP_OPEN }
+    self.targets = { IK_REST[1], IK_REST[2], IK_REST[3], IK_REST[4], IK_REST[5], SO101.GRIP_OPEN }
     self.gripper = 1                                    -- 0 closed .. 1 open
     self.gripperTarget = 1
     self.grasped = nil
@@ -175,32 +183,33 @@ function SO101:_fk()
     self.ee = self.tip.CFrame
 end
 
--- CCD inverse kinematics: aim the tip at a world point using joints 1..4.
--- Solves continuously from the current TARGETS (a persistent IK state), applies DAMPED steps and
--- stops on convergence, then writes joint TARGETS — step() servo-limits the real motion, so the
--- arm never jitters even near singular/extended poses.
+-- CCD inverse kinematics with a posture bias: aim the tip at a world point using joints 1..4,
+-- while each iteration also eases the joints toward the natural rest pose. Solves continuously from
+-- the current TARGETS, applies DAMPED steps, stops on convergence, then writes joint TARGETS —
+-- step() servo-limits the real motion, so the arm tracks smoothly and never folds into itself.
 function SO101:solveTo(worldTarget: Vector3)
-    -- keep the goal inside the reachable shell around the shoulder so the arm can't fold into
-    -- itself chasing an unreachable or too-close point
+    -- keep the goal inside the reachable shell around the shoulder
     local sh = (self.linkCF[2] or (self.base * UPFIX)).Position
     local d = worldTarget - sh
     local dist = d.Magnitude
     if dist > 8.4 then worldTarget = sh + d * (8.4 / dist)
     elseif dist > 1e-3 and dist < 2.6 then worldTarget = sh + d * (2.6 / dist) end
+
     local a = { self.targets[1], self.targets[2], self.targets[3], self.targets[4], self.targets[5], self.angles[6] }
     for _ = 1, IK_ITERS do
         local _, tip = fkFrames(self.base, a)
-        if (tip - worldTarget).Magnitude < IK_TOL then break end  -- close enough; don't over-iterate
+        local converged = (tip - worldTarget).Magnitude < IK_TOL
         for i = 4, 1, -1 do
             local F, t = fkFrames(self.base, a)
             local pivot = F[i].Position
             local axisW = F[i]:VectorToWorldSpace(SO101.CHAIN[i].axis).Unit
             local toTip = t - pivot; toTip = toTip - axisW * toTip:Dot(axisW)
             local toTgt = worldTarget - pivot; toTgt = toTgt - axisW * toTgt:Dot(axisW)
-            if toTip.Magnitude > IK_SINGULAR and toTgt.Magnitude > IK_SINGULAR then  -- skip near-axis (singular)
-                local ang = math.deg(math.atan2(toTip:Cross(toTgt):Dot(axisW), toTip:Dot(toTgt)))
-                a[i] = math.clamp(a[i] + ang * IK_DAMP, SO101.CHAIN[i].lo, SO101.CHAIN[i].hi)
+            local delta = (IK_REST[i] - a[i]) * IK_REST_W  -- always ease toward the natural pose
+            if not converged and toTip.Magnitude > IK_SINGULAR and toTgt.Magnitude > IK_SINGULAR then
+                delta += math.deg(math.atan2(toTip:Cross(toTgt):Dot(axisW), toTip:Dot(toTgt))) * IK_DAMP
             end
+            a[i] = math.clamp(a[i] + delta, SO101.CHAIN[i].lo, SO101.CHAIN[i].hi)
         end
     end
     for i = 1, 4 do self.targets[i] = a[i] end
