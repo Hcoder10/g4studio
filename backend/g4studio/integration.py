@@ -140,16 +140,18 @@ Output ONLY the corrected Luau."""
 
 
 async def run_verify_repair(spec: dict, modules: list[dict], client: CerebrasClient,
-                            on_event=None, rounds: int = 2) -> list[dict]:
-    """Deterministic verify -> targeted repair, looped until the modules mechanically agree.
-    Also unions every remote any module uses into spec.shared_remotes so the bootstrap makes them."""
-    for rnd in range(rounds):
+                            on_event=None) -> list[dict]:
+    """Deterministic verify -> targeted repair, looped until the modules mechanically agree (or the
+    team's run budget runs out). Also unions every used remote into spec.shared_remotes."""
+    rnd = 0
+    while client.runs < client.max_runs - 3:  # only the global run budget caps this
+        rnd += 1
         issues, remotes_used = verify(spec, modules)
         spec["shared_remotes"] = sorted(set(spec.get("shared_remotes", [])) | remotes_used)
         if not issues:
             break
         emit_ev(on_event, "agent", id="verify", role="QA", name="Integration Verifier",
-                status="done", detail=f"round {rnd + 1}: {len(issues)} mismatch(es)")
+                status="done", detail=f"round {rnd}: {len(issues)} mismatch(es)")
         by_mod: dict[str, list[str]] = {}
         for iss in issues:
             for mname in iss["modules"]:

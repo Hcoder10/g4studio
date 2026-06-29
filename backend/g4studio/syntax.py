@@ -86,15 +86,17 @@ compiler reported the EXACT error (line, column, reason). Fix ONLY what is neede
 compile — do not change behavior or remove features. Output ONLY the corrected Luau."""
 
 
-async def run_syntax_repair(modules: list[dict], client, on_event=None, rounds: int = 2) -> list[dict]:
+async def run_syntax_repair(modules: list[dict], client, on_event=None) -> list[dict]:
     if not _ensure():
         return modules  # no checker available -> skip gracefully
-    for rnd in range(rounds):
+    rnd = 0
+    while client.runs < client.max_runs - 2:  # only the global run budget caps this
+        rnd += 1
         bad = [(m, err) for m in modules if (err := check(m["source"]))]
         if not bad:
             break
         emit_ev(on_event, "agent", id="syntax", role="QA", name="Luau Compiler",
-                status="done", detail=f"round {rnd + 1}: {len(bad)} compile error(s)")
+                status="done", detail=f"round {rnd}: {len(bad)} compile error(s)")
 
         async def fix(m: dict, err: str):
             aid = f"syntax:{m['name']}"

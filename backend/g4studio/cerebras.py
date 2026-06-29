@@ -90,7 +90,24 @@ class CerebrasClient:
         self.max_tokens = max_tokens
         self.reasoning_effort = reasoning_effort or os.environ.get(
             "CEREBRAS_REASONING_EFFORT", "none")
+        # Hard cap on total agent runs for one game (each chat/structured/vision call is a run).
+        self.max_runs = int(os.environ.get("G4_MAX_RUNS", "120"))
+        self.runs = 0
         self._client = httpx.AsyncClient(timeout=httpx.Timeout(120.0))
+
+    def _inject_turn(self, messages: list, n: int) -> list:
+        """Tell the agent its current run / the team's hard run budget."""
+        note = (f"\n\n[Team status: you are agent run {n} of {self.max_runs}. The whole team shares a "
+                f"hard budget of {self.max_runs} agent runs for this game — work efficiently and "
+                f"don't waste turns.]")
+        out = list(messages)
+        for i, m in enumerate(out):
+            if isinstance(m, dict) and m.get("role") == "system" and isinstance(m.get("content"), str):
+                nm = dict(m)
+                nm["content"] = m["content"] + note
+                out[i] = nm
+                return out
+        return [{"role": "system", "content": note.strip()}] + out
 
     async def _post(self, body: dict) -> tuple[dict, float]:
         """POST with concurrency throttle + retry on rate-limit / transient errors, so a
@@ -136,6 +153,10 @@ class CerebrasClient:
     async def chat(self, messages: list, tools: Optional[list] = None,
                    tool_choice: Any = "auto", max_tokens: Optional[int] = None,
                    temperature: Optional[float] = None) -> Turn:
+        self.runs += 1
+        if self.runs > self.max_runs:
+            raise RuntimeError(f"G4 agent-run budget exhausted ({self.max_runs} runs)")
+        messages = self._inject_turn(messages, self.runs)
         body = self._base_body(messages, max_tokens, temperature)
         if tools:
             body["tools"] = tools

@@ -73,17 +73,19 @@ misbehave at runtime). Apply the fix described, keeping all features. Only REAL 
 ONLY the corrected Luau."""
 
 
-async def run_lint_repair(modules: list[dict], client, on_event=None, rounds: int = 2) -> list[dict]:
+async def run_lint_repair(modules: list[dict], client, on_event=None) -> list[dict]:
     # deterministic modernizations first
     for m in modules:
         m["source"] = autofix(m["source"])
 
-    for rnd in range(rounds):
+    rnd = 0
+    while client.runs < client.max_runs - 3:  # only the global run budget caps this
+        rnd += 1
         issues = lint(modules)
         if not issues:
             break
         emit_ev(on_event, "agent", id="lint", role="QA", name="Runtime Linter",
-                status="done", detail=f"round {rnd + 1}: {len(issues)} runtime issue(s)")
+                status="done", detail=f"round {rnd}: {len(issues)} runtime issue(s)")
         by_mod: dict[str, list[str]] = {}
         for iss in issues:
             by_mod.setdefault(iss["module"], []).append(iss["detail"])

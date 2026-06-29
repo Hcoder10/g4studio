@@ -415,7 +415,7 @@ end
 local function runStudioVision(build, server, client)
 	task.spawn(function()
 		local current = build
-		for attempt = 0, 5 do  -- keep revising the map until it's actually good (or we run out)
+		for attempt = 0, 9 do  -- keep revising the map until it's actually good (>=6/10)
 			task.wait(attempt == 0 and 1.2 or 0.6)  -- let the first build render
 			local ok, res = pcall(function()
 				return HttpService:RequestAsync({
@@ -677,7 +677,7 @@ local function agentPlaytest()
 		if not sok or not sts then
 			status.Text = "StudioTestService unavailable (update Studio)."; busy = false; return
 		end
-		for attempt = 1, 3 do
+		for attempt = 1, 6 do
 			status.Text = string.format("🔬 Run & Fix: Play Solo (try %d)…", attempt)
 			addChannelMsg("Run & Fix", "Running it in Play Solo to catch real bugs (try " .. attempt .. ")… 🔬")
 			placeProbe()
