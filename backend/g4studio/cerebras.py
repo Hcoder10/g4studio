@@ -8,6 +8,7 @@ Every call records latency + tokens/sec so the UI can show the speed story.
 """
 from __future__ import annotations
 
+import asyncio
 import json
 import os
 import re
@@ -16,6 +17,18 @@ from dataclasses import dataclass, field
 from typing import Any, Optional
 
 import httpx
+
+# Throttle concurrent requests across the whole process so parallel fan-outs (many fixers
+# at once) don't hammer Cerebras's RPM/TPM limits and stall.
+_MAX_CONCURRENCY = int(os.environ.get("G4_MAX_CONCURRENCY", "5"))
+_SEM: Optional[asyncio.Semaphore] = None
+
+
+def _sem() -> asyncio.Semaphore:
+    global _SEM
+    if _SEM is None:
+        _SEM = asyncio.Semaphore(_MAX_CONCURRENCY)
+    return _SEM
 
 _ENV_CANDIDATES = [
     os.path.join(os.path.dirname(__file__), "..", "..", ".env"),
@@ -80,17 +93,33 @@ class CerebrasClient:
         self._client = httpx.AsyncClient(timeout=httpx.Timeout(120.0))
 
     async def _post(self, body: dict) -> tuple[dict, float]:
-        t0 = time.perf_counter()
-        r = await self._client.post(
-            f"{self.base_url}/chat/completions",
-            headers={"Authorization": f"Bearer {self.api_key}",
-                     "Content-Type": "application/json"},
-            json=body,
-        )
-        dt_ms = (time.perf_counter() - t0) * 1000.0
-        if r.status_code != 200:
+        """POST with concurrency throttle + retry on rate-limit / transient errors, so a
+        429 or a hung connection backs off and retries instead of stalling the pipeline."""
+        url = f"{self.base_url}/chat/completions"
+        headers = {"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json"}
+        last: Optional[Exception] = None
+        for attempt in range(5):
+            t0 = time.perf_counter()
+            try:
+                async with _sem():
+                    r = await self._client.post(url, headers=headers, json=body)
+            except (httpx.TimeoutException, httpx.TransportError) as e:
+                last = e
+                await asyncio.sleep(min(1.5 * (attempt + 1), 8))
+                continue
+            if r.status_code == 200:
+                return r.json(), (time.perf_counter() - t0) * 1000.0
+            if r.status_code in (429, 500, 502, 503, 529):  # rate-limited / transient -> back off
+                last = RuntimeError(f"Cerebras {r.status_code}: {r.text[:200]}")
+                ra = r.headers.get("retry-after")
+                try:
+                    delay = float(ra) if ra else 1.5 * (attempt + 1)
+                except ValueError:
+                    delay = 1.5 * (attempt + 1)
+                await asyncio.sleep(min(delay, 8))
+                continue
             raise RuntimeError(f"Cerebras {r.status_code}: {r.text[:400]}")
-        return r.json(), dt_ms
+        raise last or RuntimeError("Cerebras: retries exhausted")
 
     def _base_body(self, messages: list, max_tokens: Optional[int],
                    temperature: Optional[float] = None) -> dict:

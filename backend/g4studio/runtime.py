@@ -69,7 +69,8 @@ async def repair_runtime_errors(modules: list[dict], errors: list[dict],
         fixed = autofix(_force_fix(_strip_fences(t.text or "")))
         return {"name": name, "kind": m["kind"], "source": fixed} if len(fixed) > 100 else None
 
-    out = [r for r in await asyncio.gather(*[fix(n, e) for n, e in grouped.items()]) if r]
+    raw = await asyncio.gather(*[fix(n, e) for n, e in grouped.items()], return_exceptions=True)
+    out = [r for r in raw if isinstance(r, dict)]
     for fm in out:  # keep the in-memory cache current for the next round
         if fm["name"] in by_name:
             by_name[fm["name"]]["source"] = fm["source"]

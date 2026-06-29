@@ -89,7 +89,7 @@ async def run_logic_qa(prompt: str, spec: dict, modules: list[dict], client: Cer
         emit_ev(on_event, "agent", id=aid, status="done", detail="logic-fixed")
         return f["module"], _force_fix(_strip_fences(t.text or ""))
 
-    for r in await asyncio.gather(*[fix_one(f) for f in fixes]):
-        if r and len(r[1]) > 100:
+    for r in await asyncio.gather(*[fix_one(f) for f in fixes], return_exceptions=True):
+        if isinstance(r, tuple) and len(r[1]) > 100:
             by_name[r[0]]["source"] = r[1]
     return modules

@@ -93,7 +93,8 @@ async def run_lint_repair(modules: list[dict], client, on_event=None, rounds: in
             emit_ev(on_event, "agent", id=aid, status="done", detail="fixed")
             return mname, autofix(_force_fix(_strip_fences(t.text or "")))
 
-        for res in await asyncio.gather(*[fix(mn, d) for mn, d in by_mod.items()]):
-            if res and len(res[1]) > 100:
+        for res in await asyncio.gather(*[fix(mn, d) for mn, d in by_mod.items()],
+                                        return_exceptions=True):
+            if isinstance(res, tuple) and len(res[1]) > 100:
                 by_name[res[0]]["source"] = res[1]
     return modules

@@ -120,8 +120,8 @@ async def run_integration_qa(spec: dict, modules: list[dict], client: CerebrasCl
         emit_ev(on_event, "agent", id=aid, status="done", detail="integration-fixed")
         return f["module"], _force_fix(_strip_fences(t.text or ""))
 
-    for r in await asyncio.gather(*[fix_one(f) for f in fixes]):
-        if r and len(r[1]) > 100:
+    for r in await asyncio.gather(*[fix_one(f) for f in fixes], return_exceptions=True):
+        if isinstance(r, tuple) and len(r[1]) > 100:
             by_name[r[0]]["source"] = r[1]
     return modules
 
@@ -165,8 +165,9 @@ async def run_verify_repair(spec: dict, modules: list[dict], client: CerebrasCli
             emit_ev(on_event, "agent", id=aid, status="done", detail="reconciled")
             return mname, _force_fix(_strip_fences(t.text or ""))
 
-        for res in await asyncio.gather(*[fix(mn, d) for mn, d in by_mod.items()]):
-            if res and len(res[1]) > 100:
+        for res in await asyncio.gather(*[fix(mn, d) for mn, d in by_mod.items()],
+                                        return_exceptions=True):
+            if isinstance(res, tuple) and len(res[1]) > 100:
                 by_name[res[0]]["source"] = res[1]
 
     _, remotes_used = verify(spec, modules)

@@ -143,15 +143,21 @@ async def run_modules(spec: dict, resolved: dict, client: CerebrasClient, on_eve
     for sm in shared_defs:
         if sm["name"] in shared_src:
             continue
-        shared_src[sm["name"]] = await _build_shared(sm, spec, client, on_event)
+        try:
+            shared_src[sm["name"]] = await _build_shared(sm, spec, client, on_event)
+        except Exception:
+            shared_src[sm["name"]] = f"local M = {{}}\nreturn M  -- {sm['name']} (build failed)"
     shared_blob = "\n\n".join(f"-- ReplicatedStorage.G4Shared.{n}\n{s}"
                               for n, s in shared_src.items()) or "(none)"
 
-    # 2) runnable systems in parallel (each focused + bound by the same contract)
-    sources = await asyncio.gather(
-        *[_build_system(s, spec, shared_blob, resolved, client, on_event) for s in runnable])
+    # 2) runnable systems in parallel; one failure must not cancel the others or kill the build
+    raw = await asyncio.gather(
+        *[_build_system(s, spec, shared_blob, resolved, client, on_event) for s in runnable],
+        return_exceptions=True)
 
     modules = [{"name": n, "kind": "shared", "source": s} for n, s in shared_src.items()]
-    for sysd, src in zip(runnable, sources):
+    for sysd, src in zip(runnable, raw):
+        if not isinstance(src, str) or len(src) < 50:
+            src = f"local M = {{}}\nfunction M.start() end\nreturn M  -- {sysd['name']} (build failed)"
         modules.append({"name": sysd["name"], "kind": sysd["run"], "source": src})
     return modules
