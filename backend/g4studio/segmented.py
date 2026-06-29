@@ -19,8 +19,17 @@ async def run_segmented(prompt: str, client: CerebrasClient, on_event=None) -> t
     spec, _ = await run_architect(prompt, client, on_event)
     resolved = resolve_assets(spec, k=2)
     modules = await run_modules(spec, resolved, client, on_event)
+    # runtime footguns: modernize wait/spawn, fix client-only-API-on-server, freeze loops
+    from .lint import run_lint_repair
+    modules = await run_lint_repair(modules, client, on_event)
     # holistic pass: one reviewer sees ALL modules, decides conventions, fixes how they connect
     modules = await run_integration_qa(spec, modules, client, on_event)
+    # gameplay logic: trace the core loops (win/lose, reward, progression) and close the gaps
+    from .logic import run_logic_qa
+    modules = await run_logic_qa(prompt, spec, modules, client, on_event)
+    # final ship review: completeness, fun/juice, balance, polish
+    from .polish import run_polish_qa
+    modules = await run_polish_qa(prompt, spec, modules, client, on_event)
     # mechanical guarantee: verify the modules agree (attrs/tags/remotes/requires) -> repair -> repeat
     modules = await run_verify_repair(spec, modules, client, on_event)
     # final gate: every module must actually COMPILE (real Luau compiler) -> repair -> repeat

@@ -62,6 +62,12 @@ ASSET USAGE — each resolved asset has a TYPE; use it the RIGHT way (the asset 
   Never set MeshId to a model id. Always keep a procedural fallback so the game looks right even if
   an asset fails to load.
 
+GAME FEEL (make it FUN, not a tech demo) — give every important moment FEEDBACK:
+- a Sound on key actions (place, shoot, hit, collect, wave start, win, lose);
+- a quick visual: a ParticleEmitter:Emit() burst, a TweenService pop/flash/scale, or a Highlight;
+- floating number popups for damage/currency (a BillboardGui + TextLabel that rises and fades);
+- animate UI with TweenService (never snap); show a clear victory AND defeat screen with payoff.
+
 Follow the contract EXACTLY. Output ONLY the Luau ModuleScript."""
 
 
@@ -91,6 +97,8 @@ def _spec_header(spec: dict) -> str:
     mods = ", ".join(f'{m["name"]} ({m["purpose"]})' for m in spec.get("shared_modules", []))
     return (f'GAME: {spec.get("title")} — {spec.get("summary")}\n'
             f'FLOW: {spec.get("flow")}\nWORLD: {spec.get("world")}\n'
+            f'FUN (deliver this hook + reward loop): {spec.get("fun", "")}\n'
+            f'DIFFICULTY (escalate like this): {spec.get("difficulty", "")}\n'
             f'SHARED REMOTES: {remotes}\nSHARED MODULES: {mods}')
 
 

@@ -31,16 +31,24 @@ Define the SHARED CONTRACT every system relies on so independent engineers integ
   module: the harness auto-creates every RemoteEvent in shared_remotes at ReplicatedStorage.G4Remotes.)
 
 Also: flow (e.g. "lobby -> matchmaking -> round -> results"), and world (the map/arena to build).
+
+Design for FUN, not just function:
+- fun: the core hook + the moment-to-moment reward/progression loop that keeps players engaged
+  (what the player does over and over, and the satisfying payoff each time).
+- difficulty: how the challenge ESCALATES over time so it stays engaging (and a clear win + lose).
 Be concrete and consistent. Prefer fewer, well-defined systems over many vague ones."""
 
 ARCH_SCHEMA = {
     "type": "object",
     "additionalProperties": False,
-    "required": ["title", "summary", "flow", "shared_remotes", "shared_modules", "systems", "world"],
+    "required": ["title", "summary", "flow", "fun", "difficulty", "shared_remotes",
+                 "shared_modules", "systems", "world"],
     "properties": {
         "title": {"type": "string"},
         "summary": {"type": "string"},
         "flow": {"type": "string"},
+        "fun": {"type": "string"},
+        "difficulty": {"type": "string"},
         "shared_remotes": {"type": "array", "items": {"type": "string"}},
         "shared_modules": {
             "type": "array",
