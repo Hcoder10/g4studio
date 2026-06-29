@@ -37,6 +37,56 @@ async def health():
     return {"ok": True}
 
 
+# ---- AI playtester that actually PLAYS the game in a real Play session ----
+LAST_GAME = {"prompt": "", "name": ""}
+PLAYBOT = {"notes": []}
+
+PLAYBOT_SYSTEM = (
+    "You are an AI PLAYTESTER actively PLAYING a Roblox game to TEST it. You see a screenshot from "
+    "the player's view plus the player's state. Verify the game WORKS and is PLAYABLE, make progress "
+    "toward the objective, and report problems (can't move, fell off the map, nothing happens, looks "
+    "broken, no clear objective, score never changes). Each step choose ONE action: 'forward','back',"
+    "'left','right' (move relative to the camera), 'jump' (to climb/cross gaps), or 'wait' (observe). "
+    'Output ONLY JSON: {"action":"<one>","note":"<short observation / any problem>",'
+    '"done":<true when you have tested enough or are stuck/finished>,'
+    '"verdict":"<when done: one blunt sentence>","score":<when done: 0-10 how playable>}'
+)
+
+
+@app.post("/api/playbot")
+async def api_playbot(req: Request):
+    body = await req.json()
+    state = body.get("state") or {}
+    step = int(body.get("step", 0))
+    if step == 0:
+        PLAYBOT["notes"] = []
+    data_uri = capture_data_uri()
+    msg = (f"Game: {LAST_GAME.get('name')}. Objective: {LAST_GAME.get('prompt')}. Step {step}/40. "
+           f"Player state: pos={state.get('pos')}, score={state.get('leaderstats')}, "
+           f"health={state.get('health')}. Decide your next action to play & test. Output only JSON.")
+    if not data_uri:
+        return {"action": "forward", "note": "no screenshot (is Studio in Play + visible?)",
+                "done": step >= 6, "verdict": "could not see the game", "score": 3}
+    client = CerebrasClient()
+    try:
+        crit, _ = await client.vision_json(PLAYBOT_SYSTEM, msg, data_uri, max_tokens=400, temperature=0.4)
+        action = str(crit.get("action", "forward")).lower()
+        note = str(crit.get("note", ""))
+        if note:
+            PLAYBOT["notes"].append(note)
+        done = bool(crit.get("done")) or step >= 40
+        out = {"action": action, "note": note, "done": done}
+        if done:
+            out["verdict"] = str(crit.get("verdict", "playtest complete"))
+            try:
+                out["score"] = int(crit.get("score", 6))
+            except (TypeError, ValueError):
+                out["score"] = 6
+        return out
+    finally:
+        await client.aclose()
+
+
 @app.post("/api/vision")
 async def api_vision(req: Request):
     """Screenshot the REAL Roblox Studio window, have Gemma-4 grade the engine render,
@@ -120,6 +170,8 @@ async def gen_start(req: Request):
             done_ev = {"type": "done", "name": build.get("name"), "metrics": metrics,
                        "rbxmx": build_to_rbxmx(build)}
             if build.get("authored"):
+                LAST_GAME["prompt"] = prompt
+                LAST_GAME["name"] = build.get("name", "game")
                 done_ev["authored"] = True
                 done_ev["build"] = build.get("build", "")
                 done_ev["server"] = build.get("server", "")

@@ -78,6 +78,13 @@ buildBtn.TextColor3 = Color3.fromRGB(4, 18, 26); buildBtn.Text = "Build ⚡"
 buildBtn.LayoutOrder = 3; buildBtn.Parent = bg
 local btc = Instance.new("UICorner"); btc.CornerRadius = UDim.new(0, 8); btc.Parent = buildBtn
 
+local playBtn = Instance.new("TextButton")
+playBtn.Size = UDim2.new(1, 0, 0, 32); playBtn.BackgroundColor3 = Color3.fromRGB(74, 163, 255)
+playBtn.BorderSizePixel = 0; playBtn.Font = Enum.Font.GothamBold; playBtn.TextSize = 14
+playBtn.TextColor3 = Color3.fromRGB(4, 18, 26); playBtn.Text = "🤖 Agent Playtest"
+playBtn.LayoutOrder = 3; playBtn.Parent = bg
+local ptc = Instance.new("UICorner"); ptc.CornerRadius = UDim.new(0, 8); ptc.Parent = playBtn
+
 local agentList = Instance.new("ScrollingFrame")
 agentList.Size = UDim2.new(1, 0, 1, -150); agentList.BackgroundColor3 = Color3.fromRGB(10, 15, 23)
 agentList.BorderSizePixel = 0; agentList.ScrollBarThickness = 4
@@ -213,6 +220,95 @@ local function placeScripts(server, client)
 	local oldC = SPS:FindFirstChild("G4Client"); if oldC then oldC:Destroy() end
 	if client and #client > 0 then
 		local lc = Instance.new("LocalScript"); lc.Name = "G4Client"; lc.Source = client; lc.Parent = SPS
+	end
+end
+
+-- ===== AI playtest: a real Play Solo session via StudioTestService =====
+local TEST_SERVER_SRC = [==[
+local StudioTestService = game:GetService("StudioTestService")
+local RunService = game:GetService("RunService")
+local Players = game:GetService("Players")
+local RS = game:GetService("ReplicatedStorage")
+local HttpService = game:GetService("HttpService")
+local SERVER = "{{SERVER_URL}}"
+if not RunService:IsRunning() then return end
+if StudioTestService:GetTestArgs() ~= "G4PLAYTEST" then return end
+
+local camRemote = Instance.new("RemoteEvent"); camRemote.Name = "G4CamRemote"; camRemote.Parent = RS
+local camCF = nil
+camRemote.OnServerEvent:Connect(function(_, cf) camCF = cf end)
+
+task.spawn(function()
+	local plr = Players:GetPlayers()[1] or Players.PlayerAdded:Wait()
+	local char = plr.Character or plr.CharacterAdded:Wait()
+	local hum = char:WaitForChild("Humanoid")
+	local hrp = char:WaitForChild("HumanoidRootPart")
+	pcall(function() hrp:SetNetworkOwner(nil) end)
+	task.wait(1.5)
+	local function readState()
+		local ls = {}
+		local lsf = plr:FindFirstChild("leaderstats")
+		if lsf then for _, v in ipairs(lsf:GetChildren()) do ls[v.Name] = v.Value end end
+		return { pos = { math.floor(hrp.Position.X), math.floor(hrp.Position.Y), math.floor(hrp.Position.Z) },
+			health = hum.Health, leaderstats = ls }
+	end
+	local verdict, score = "playtest ended", 5
+	for step = 0, 40 do
+		local ok, res = pcall(function()
+			return HttpService:RequestAsync({ Url = SERVER .. "/api/playbot", Method = "POST",
+				Headers = { ["Content-Type"] = "application/json" },
+				Body = HttpService:JSONEncode({ state = readState(), step = step }) })
+		end)
+		if not ok or not res.Success then break end
+		local data = HttpService:JSONDecode(res.Body)
+		local dir = Vector3.zero
+		if camCF then
+			local look = camCF.LookVector; look = Vector3.new(look.X, 0, look.Z); if look.Magnitude > 0 then look = look.Unit end
+			local rt = camCF.RightVector; rt = Vector3.new(rt.X, 0, rt.Z); if rt.Magnitude > 0 then rt = rt.Unit end
+			local a = data.action
+			if a == "forward" then dir = look elseif a == "back" then dir = -look
+			elseif a == "left" then dir = -rt elseif a == "right" then dir = rt end
+		end
+		hum:Move(dir, false)
+		if data.action == "jump" then hum.Jump = true end
+		if data.done then verdict = data.verdict or verdict; score = data.score or score; break end
+		task.wait(0.35)
+	end
+	pcall(function() hum:Move(Vector3.zero) end)
+	StudioTestService:EndTest({ verdict = verdict, score = score })
+end)
+]==]
+
+local TEST_CLIENT_SRC = [==[
+local Players = game:GetService("Players")
+local RS = game:GetService("ReplicatedStorage")
+local camRemote = RS:WaitForChild("G4CamRemote", 8)
+if not camRemote then return end
+local cam = workspace.CurrentCamera
+while camRemote and camRemote.Parent do
+	task.wait(0.2)
+	if cam then camRemote:FireServer(cam.CFrame) end
+end
+]==]
+
+local function placeTestScripts()
+	local SSS = game:GetService("ServerScriptService")
+	local SP = game:GetService("StarterPlayer")
+	local SPS = SP:FindFirstChild("StarterPlayerScripts") or Instance.new("StarterPlayerScripts", SP)
+	local oldS = SSS:FindFirstChild("G4TestServer"); if oldS then oldS:Destroy() end
+	local s = Instance.new("Script"); s.Name = "G4TestServer"
+	s.Source = TEST_SERVER_SRC:gsub("{{SERVER_URL}}", function() return serverUrl() end)
+	s.Parent = SSS
+	local oldC = SPS:FindFirstChild("G4TestClient"); if oldC then oldC:Destroy() end
+	local c = Instance.new("LocalScript"); c.Name = "G4TestClient"; c.Source = TEST_CLIENT_SRC; c.Parent = SPS
+end
+
+local function removeTestScripts()
+	for _, where in ipairs({ game:GetService("ServerScriptService"):FindFirstChild("G4TestServer"),
+		game:GetService("StarterPlayer"):FindFirstChild("StarterPlayerScripts") and
+		game:GetService("StarterPlayer").StarterPlayerScripts:FindFirstChild("G4TestClient"),
+		game:GetService("ReplicatedStorage"):FindFirstChild("G4CamRemote") }) do
+		if where then where:Destroy() end
 	end
 end
 
@@ -400,5 +496,30 @@ local function build()
 	end)
 end
 buildBtn.MouseButton1Click:Connect(build)
+
+local function agentPlaytest()
+	if busy then return end
+	busy = true
+	status.Text = "Placing test bot + starting Play Solo…"
+	placeTestScripts()
+	task.spawn(function()
+		local sok, sts = pcall(function() return game:GetService("StudioTestService") end)
+		if not sok or not sts then
+			status.Text = "StudioTestService unavailable (update Studio)."
+			removeTestScripts(); busy = false; return
+		end
+		local rok, result = pcall(function() return sts:ExecutePlayModeAsync("G4PLAYTEST") end)
+		removeTestScripts()
+		if rok and type(result) == "table" then
+			status.Text = string.format("🤖 Playtest: %s/10 — %s", tostring(result.score), tostring(result.verdict))
+		elseif rok then
+			status.Text = "🤖 Playtest finished."
+		else
+			status.Text = "Playtest error: " .. tostring(result)
+		end
+		busy = false
+	end)
+end
+playBtn.MouseButton1Click:Connect(agentPlaytest)
 
 print("[G4Studio] plugin loaded. Server: " .. serverUrl())

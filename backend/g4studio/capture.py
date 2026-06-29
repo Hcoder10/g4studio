@@ -21,7 +21,9 @@ def find_studio_hwnd():
             return
         title = win32gui.GetWindowText(hwnd) or ""
         cls = win32gui.GetClassName(hwnd) or ""
-        if "Roblox Studio" in title or "RobloxStudio" in cls:
+        if "RobloxStudio" in cls:           # the real Studio window class (RobloxStudioBeta)
+            matches.insert(0, hwnd)         # prioritize the exact match
+        elif title.rstrip().endswith("Roblox Studio"):  # Studio title ends this way; browser tabs don't
             matches.append(hwnd)
 
     win32gui.EnumWindows(cb, None)
