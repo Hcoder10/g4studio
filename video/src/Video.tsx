@@ -88,7 +88,7 @@ const Hook: React.FC = () => (
 
 const Arm: React.FC = () => (
   <AbsoluteFill>
-    <OffthreadVideo src={staticFile("arm.mp4")} playbackRate={1} muted style={{ position: "absolute", width: "100%", height: "100%", objectFit: "contain" }} />
+    <OffthreadVideo src={staticFile("arm.mp4")} loop muted style={{ position: "absolute", width: "100%", height: "100%", objectFit: "contain" }} />
     <AbsoluteFill style={{ justifyContent: "flex-end", padding: 90 }}>
       <Reveal delay={8}><div style={{ fontSize: 46, fontWeight: 800, color: C.ink, textShadow: glow(C.blue, 12) }}>
         A faithful SO-101 arm</div></Reveal>
@@ -212,13 +212,13 @@ const Outro: React.FC = () => {
 export const Video: React.FC = () => (
   <AbsoluteFill style={{ background: C.bg, fontFamily: FONT }}>
     <Bg />
-    <Sequence durationInFrames={90}><Intro /></Sequence>
-    <Sequence from={90} durationInFrames={130}><Hook /></Sequence>
-    <Sequence from={220} durationInFrames={170}><Arm /></Sequence>
-    <Sequence from={390} durationInFrames={170}><Gemma /></Sequence>
-    <Sequence from={560} durationInFrames={160}><Loop /></Sequence>
-    <Sequence from={720} durationInFrames={190}><DataSci /></Sequence>
-    <Sequence from={910} durationInFrames={130}><Generalize /></Sequence>
-    <Sequence from={1040} durationInFrames={100}><Outro /></Sequence>
+    <Sequence durationInFrames={135}><Intro /></Sequence>
+    <Sequence from={135} durationInFrames={195}><Hook /></Sequence>
+    <Sequence from={330} durationInFrames={240}><Arm /></Sequence>
+    <Sequence from={570} durationInFrames={198}><Gemma /></Sequence>
+    <Sequence from={768} durationInFrames={210}><Loop /></Sequence>
+    <Sequence from={978} durationInFrames={288}><DataSci /></Sequence>
+    <Sequence from={1266} durationInFrames={210}><Generalize /></Sequence>
+    <Sequence from={1476} durationInFrames={138}><Outro /></Sequence>
   </AbsoluteFill>
 );
