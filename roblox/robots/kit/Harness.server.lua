@@ -137,25 +137,33 @@ function ctx.rand(lo, hi) return lo + math.random() * (hi - lo) end
 -- generated game asks for (pulls out-of-reach spots in; lifts anything that would spawn below/in the
 -- table). This is why placement is reliable even when Gemma picks awkward coordinates.
 local CELL_TOP = 0.5
-local function clampToCell(pos: Vector3, halfH: number): Vector3
+local function clampToCell(pos, halfH): Vector3
+	if typeof(pos) ~= "Vector3" then return pos end          -- can't clamp a non-vector; pass through
+	local h = (type(halfH) == "number") and halfH or 0.5     -- tolerate a bad/Vector3 halfH
 	local c = REGION.center
 	local dx, dz = pos.X - c.X, pos.Z - c.Z
 	local r = math.sqrt(dx * dx + dz * dz)
 	local rmax = REGION.reach * 0.82
 	if r > rmax and r > 1e-4 then dx, dz = dx * rmax / r, dz * rmax / r end
-	return Vector3.new(c.X + dx, math.max(pos.Y, CELL_TOP + (halfH or 0.5)), c.Z + dz)
+	return Vector3.new(c.X + dx, math.max(pos.Y, CELL_TOP + h), c.Z + dz)
 end
-function ctx.spawnCube(pos: Vector3, color: Color3?, size: number?)
-	local s = size or 1
-	local c = Instance.new("Part"); c.Name = "Cube"; c.Size = Vector3.new(s, s, s); c.Anchored = false
-	c.Color = color or Color3.fromRGB(255, 170, 0); c.Material = Enum.Material.SmoothPlastic
-	c.Position = clampToCell(pos, s / 2); c.Parent = sceneFolder; CollectionService:AddTag(c, "Graspable")
+function ctx.spawnCube(pos: Vector3, color: Color3?, size)
+	local c = Instance.new("Part"); c.Name = "Cube"; c.Anchored = false
+	if typeof(size) == "Vector3" then c.Size = size                              -- game passed a Vector3
+	else local s = (type(size) == "number") and size or 1; c.Size = Vector3.new(s, s, s) end
+	c.Color = (typeof(color) == "Color3") and color or Color3.fromRGB(255, 170, 0)
+	c.Material = Enum.Material.SmoothPlastic
+	c.Position = clampToCell(pos, c.Size.Y / 2); c.Parent = sceneFolder; CollectionService:AddTag(c, "Graspable")
 	return c
 end
-function ctx.spawnBin(pos: Vector3, color: Color3?, size: Vector3?)
+function ctx.spawnBin(pos: Vector3, color: Color3?, size)
 	local b = Instance.new("Part"); b.Name = "Bin"; b.Anchored = true
-	b.Size = size or Vector3.new(2.5, 1, 2.5); b.Position = clampToCell(pos, b.Size.Y / 2)
-	b.Color = color or Color3.fromRGB(0, 170, 90); b.Material = Enum.Material.SmoothPlastic; b.Parent = sceneFolder
+	if typeof(size) == "Vector3" then b.Size = size
+	elseif type(size) == "number" then b.Size = Vector3.new(size, 1, size)       -- game passed a number
+	else b.Size = Vector3.new(2.5, 1, 2.5) end
+	b.Position = clampToCell(pos, b.Size.Y / 2)
+	b.Color = (typeof(color) == "Color3") and color or Color3.fromRGB(0, 170, 90)
+	b.Material = Enum.Material.SmoothPlastic; b.Parent = sceneFolder
 	return b
 end
 function ctx.spawnPart(props)
