@@ -1,5 +1,7 @@
 # G4 Studio: Roblox as a robot-data factory using Gemma 4
 
+> 🦾 **Try it live in Roblox** — the SO-101 testing place: **[Robotic Arm](https://www.roblox.com/games/84419767230977/Robotic-Arm)**
+
 **Point Gemma-4 at a robot arm. It invents fun games where *playing is labeling robot training
 data***, and keeps inventing harder ones as players get good. The arm is a faithful, URDF-exact
 **SO-101**; every session records LeRobot-format joint-space demonstrations.
