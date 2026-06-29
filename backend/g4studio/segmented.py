@@ -11,7 +11,7 @@ from .builder import run_modules
 from .cerebras import CerebrasClient
 from .genre_common import emit_ev
 from .integrate import assemble
-from .integration import run_integration_qa
+from .integration import run_integration_qa, run_verify_repair
 
 
 async def run_segmented(prompt: str, client: CerebrasClient, on_event=None) -> tuple[dict, dict]:
@@ -21,6 +21,8 @@ async def run_segmented(prompt: str, client: CerebrasClient, on_event=None) -> t
     modules = await run_modules(spec, resolved, client, on_event)
     # holistic pass: one reviewer sees ALL modules, decides conventions, fixes how they connect
     modules = await run_integration_qa(spec, modules, client, on_event)
+    # mechanical guarantee: verify the modules agree (attrs/tags/remotes/requires) -> repair -> repeat
+    modules = await run_verify_repair(spec, modules, client, on_event)
     build = assemble(spec, modules)
 
     total_lines = sum(m["source"].count("\n") + 1 for m in modules)

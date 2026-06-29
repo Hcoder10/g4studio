@@ -14,6 +14,7 @@ import asyncio
 from .authored import _force_fix, _strip_fences
 from .cerebras import CerebrasClient
 from .genre_common import emit_ev
+from .verify import verify
 
 REVIEW_SYSTEM = r"""You are the INTEGRATION lead reviewing a COMPLETE multi-module Roblox game.
 You can see EVERY module. Your job is to find the cross-module integration bugs that individual
@@ -122,4 +123,52 @@ async def run_integration_qa(spec: dict, modules: list[dict], client: CerebrasCl
     for r in await asyncio.gather(*[fix_one(f) for f in fixes]):
         if r and len(r[1]) > 100:
             by_name[r[0]]["source"] = r[1]
+    return modules
+
+
+VERIFY_FIX_SYSTEM = r"""You are fixing ONE module of a Roblox game so it AGREES with the others on
+the shared interface. A mechanical checker found exact mismatches — an attribute name, a
+CollectionService tag, or a required module that does not line up across the files. Fix YOUR module
+so the names match the rest of the game (you can see every module). Keep all features working.
+Output ONLY the corrected Luau."""
+
+
+async def run_verify_repair(spec: dict, modules: list[dict], client: CerebrasClient,
+                            on_event=None, rounds: int = 2) -> list[dict]:
+    """Deterministic verify -> targeted repair, looped until the modules mechanically agree.
+    Also unions every remote any module uses into spec.shared_remotes so the bootstrap makes them."""
+    for rnd in range(rounds):
+        issues, remotes_used = verify(spec, modules)
+        spec["shared_remotes"] = sorted(set(spec.get("shared_remotes", [])) | remotes_used)
+        if not issues:
+            break
+        emit_ev(on_event, "agent", id="verify", role="QA", name="Integration Verifier",
+                status="done", detail=f"round {rnd + 1}: {len(issues)} mismatch(es)")
+        by_mod: dict[str, list[str]] = {}
+        for iss in issues:
+            for mname in iss["modules"]:
+                by_mod.setdefault(mname, []).append(iss["detail"])
+        blob = "\n\n".join(f"-- ===== {_loc(m)} =====\n{m['source']}" for m in modules)
+        by_name = {m["name"]: m for m in modules}
+
+        async def fix(mname: str, details: list[str]):
+            m = by_name.get(mname)
+            if not m:
+                return None
+            aid = f"verify:{mname}"
+            emit_ev(on_event, "agent", id=aid, role="Coder", name=mname, status="working")
+            user = (f"MECHANICAL INTEGRATION ERRORS in '{mname}':\n- " + "\n- ".join(details) +
+                    f"\n\nEVERY MODULE (match the shared names the OTHER modules use):\n{blob}\n\n"
+                    f"Output the corrected '{mname}' module ({_loc(m)}), matching the rest of the game.")
+            t = await client.chat([{"role": "system", "content": VERIFY_FIX_SYSTEM},
+                                   {"role": "user", "content": user}], max_tokens=12000, temperature=0.3)
+            emit_ev(on_event, "agent", id=aid, status="done", detail="reconciled")
+            return mname, _force_fix(_strip_fences(t.text or ""))
+
+        for res in await asyncio.gather(*[fix(mn, d) for mn, d in by_mod.items()]):
+            if res and len(res[1]) > 100:
+                by_name[res[0]]["source"] = res[1]
+
+    _, remotes_used = verify(spec, modules)
+    spec["shared_remotes"] = sorted(set(spec.get("shared_remotes", [])) | remotes_used)
     return modules
