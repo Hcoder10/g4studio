@@ -26,8 +26,9 @@ For each system give:
 
 Define the SHARED CONTRACT every system relies on so independent engineers integrate cleanly:
 - shared_remotes: RemoteEvent/RemoteFunction names (in ReplicatedStorage)
-- shared_modules: shared ModuleScripts (name + purpose), e.g. a GameConfig module holding the
-  tower/enemy/wave definition tables, a Remotes accessor.
+- shared_modules: shared ModuleScripts (name + purpose) for DATA/CONFIG/UTILITIES — e.g. a
+  GameConfig module holding the tower/enemy/wave definition tables. (Do NOT plan a networking
+  module: the harness auto-creates every RemoteEvent in shared_remotes at ReplicatedStorage.G4Remotes.)
 
 Also: flow (e.g. "lobby -> matchmaking -> round -> results"), and world (the map/arena to build).
 Be concrete and consistent. Prefer fewer, well-defined systems over many vague ones."""
