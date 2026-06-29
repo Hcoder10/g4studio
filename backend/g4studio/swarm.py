@@ -328,6 +328,35 @@ async def classify_genre(client: CerebrasClient, prompt: str) -> str:
         return "custom"
 
 
+COMPLEXITY_SCHEMA = {
+    "type": "object", "additionalProperties": False,
+    "properties": {
+        "complexity": {"type": "string", "enum": ["simple", "complex"]},
+        "reason": {"type": "string"},
+    },
+    "required": ["complexity", "reason"],
+}
+
+COMPLEXITY_SYSTEM = """Decide how to build a requested Roblox game:
+- "complex": needs MULTIPLE coordinated systems — a lobby/menu, matchmaking, rounds or waves,
+  an economy/shop, distinct subsystems that must talk (towers + enemies + UI), or multiplayer
+  flow. Examples: tower defense; a round-based PvP arena with a shop; a tycoon with several
+  systems; a battle royale; a simulator with pets + shop + zones + rebirth.
+- "simple": one coherent scene with one main mechanic — an obby, a small collector, a parkour
+  map, a basic clicker, a maze, a single-arena minigame.
+Pick "complex" ONLY when several systems must coordinate; otherwise "simple"."""
+
+
+async def classify_complexity(client: CerebrasClient, prompt: str) -> str:
+    try:
+        out, _ = await client.structured(COMPLEXITY_SYSTEM, prompt, COMPLEXITY_SCHEMA,
+                                         name="route", max_tokens=150, temperature=0.0)
+        c = out.get("complexity", "simple")
+        return c if c in ("simple", "complex") else "simple"
+    except Exception:
+        return "simple"
+
+
 GOOD_SCORE = 6        # playtester score that counts as "good enough"
 MAX_REDESIGNS = 1     # one redesign attempt if rejected (bounds latency)
 
@@ -351,12 +380,16 @@ async def generate_game(prompt: str, client: Optional[CerebrasClient] = None,
     own = client is None
     client = client or CerebrasClient()
     try:
-        if force_genre in ("obby", "simulator", "custom"):
+        if force_genre in ("obby", "simulator", "custom", "segmented", "authored"):
             genre = force_genre
         else:
-            genre = "authored"  # DEFAULT: the model authors the whole game (full control)
+            # auto-route: multi-system games -> segmented harness; single-scene -> authored
+            genre = "segmented" if await classify_complexity(client, prompt) == "complex" else "authored"
         _emit(on_event, "genre", genre=genre)
 
+        if genre == "segmented":
+            from .segmented import run_segmented
+            return await run_segmented(prompt, client, on_event)
         if genre == "authored":
             return await run_authored(prompt, client, on_event)
 

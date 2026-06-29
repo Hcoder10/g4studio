@@ -167,16 +167,25 @@ async def gen_start(req: Request):
     async def run() -> None:
         try:
             build, metrics = await generate_game(prompt, on_event=on_event)
-            done_ev = {"type": "done", "name": build.get("name"), "metrics": metrics,
-                       "rbxmx": build_to_rbxmx(build)}
-            if build.get("authored"):
+            done_ev = {"type": "done", "name": build.get("name"), "metrics": metrics}
+            if build.get("segmented"):
+                LAST_GAME["prompt"] = prompt
+                LAST_GAME["name"] = build.get("name", "game")
+                done_ev["segmented"] = True
+                done_ev["shared"] = build.get("shared", [])
+                done_ev["systems"] = build.get("systems", [])
+                done_ev["server_bootstrap"] = build.get("server_bootstrap", "")
+                done_ev["client_bootstrap"] = build.get("client_bootstrap", "")
+            elif build.get("authored"):
                 LAST_GAME["prompt"] = prompt
                 LAST_GAME["name"] = build.get("name", "game")
                 done_ev["authored"] = True
                 done_ev["build"] = build.get("build", "")
                 done_ev["server"] = build.get("server", "")
                 done_ev["client"] = build.get("client", "")
+                done_ev["rbxmx"] = build_to_rbxmx(build)
             else:
+                done_ev["rbxmx"] = build_to_rbxmx(build)
                 for s in build.get("scripts", []):
                     if s.get("name") == "G4Mechanics":
                         done_ev["mechanics"] = s.get("source", "")

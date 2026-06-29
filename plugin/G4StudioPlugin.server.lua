@@ -223,6 +223,30 @@ local function placeScripts(server, client)
 	end
 end
 
+-- Place a SEGMENTED (multi-system) game into the right services + bootstraps.
+local function placeSegmented(ev)
+	local RS = game:GetService("ReplicatedStorage")
+	local SSS = game:GetService("ServerScriptService")
+	local SP = game:GetService("StarterPlayer")
+	local SPS = SP:FindFirstChild("StarterPlayerScripts") or Instance.new("StarterPlayerScripts", SP)
+	local function freshFolder(parent, name)
+		local f = parent:FindFirstChild(name); if f then f:Destroy() end
+		f = Instance.new("Folder"); f.Name = name; f.Parent = parent; return f
+	end
+	local sharedF = freshFolder(RS, "G4Shared")
+	local sysF = freshFolder(RS, "G4Systems")
+	for _, m in ipairs(ev.shared or {}) do
+		local ms = Instance.new("ModuleScript"); ms.Name = m.name; ms.Source = m.source; ms.Parent = sharedF
+	end
+	for _, m in ipairs(ev.systems or {}) do
+		local ms = Instance.new("ModuleScript"); ms.Name = m.name; ms.Source = m.source; ms.Parent = sysF
+	end
+	local oldSB = SSS:FindFirstChild("G4ServerBootstrap"); if oldSB then oldSB:Destroy() end
+	local sb = Instance.new("Script"); sb.Name = "G4ServerBootstrap"; sb.Source = ev.server_bootstrap or ""; sb.Parent = SSS
+	local oldCB = SPS:FindFirstChild("G4ClientBootstrap"); if oldCB then oldCB:Destroy() end
+	local cb = Instance.new("LocalScript"); cb.Name = "G4ClientBootstrap"; cb.Source = ev.client_bootstrap or ""; cb.Parent = SPS
+end
+
 -- ===== AI playtest: a real Play Solo session via StudioTestService =====
 local TEST_SERVER_SRC = [==[
 local StudioTestService = game:GetService("StudioTestService")
@@ -416,7 +440,12 @@ local function handleEvent(ev)
 		applyOps(ev.ops)
 	elseif ev.type == "done" then
 		local m = ev.metrics or {}
-		if ev.authored and ev.build then
+		if ev.segmented then
+			-- multi-system game: place modules into ReplicatedStorage + bootstraps, run on Play
+			placeSegmented(ev)
+			status.Text = string.format("✅ '%s' — %d shared + %d systems placed (ReplicatedStorage) + bootstraps. Press PLAY.",
+				tostring(ev.name or "game"), #(ev.shared or {}), #(ev.systems or {}))
+		elseif ev.authored and ev.build then
 			-- BUILD the static world in REAL Studio (edit/plugin runtime); gameplay scripts
 			-- are placed to run at game runtime, not in the plugin.
 			status.Text = "Building '" .. tostring(ev.name or "game") .. "' in Studio…"
