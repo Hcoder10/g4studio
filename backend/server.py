@@ -78,6 +78,38 @@ async def api_datasets():
     return out
 
 
+def _build_robot_game(source: str) -> str:
+    """Package a Gemma-authored Game module + the kit into out/G4RobotGame.rbxmx; return the path."""
+    import importlib.util
+    bgpath = os.path.join(REPO, "roblox", "robots", "build_game_rbxmx.py")
+    spec = importlib.util.spec_from_file_location("g4_build_game", bgpath)
+    bg = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(bg)
+    return bg.build(source, os.path.join(REPO, "out", "G4RobotGame.rbxmx"))
+
+
+@app.post("/api/robotgame")
+async def api_robotgame(req: Request):
+    """Gemma designs + codes a fun robot-manipulation game (data falls out of play) and we package
+    it with the kit into out/G4RobotGame.rbxmx."""
+    from g4studio.robotgame import generate_robot_game
+    body = await req.json()
+    theme = (body.get("theme") or "").strip()
+    client = CerebrasClient()
+    try:
+        g = await generate_robot_game(client, theme)
+    finally:
+        await client.aclose()
+    path = _build_robot_game(g["source"])
+    return {"design": g["design"], "compiles": g["compiles"],
+            "lines": g["source"].count("\n") + 1, "rbxmx": path}
+
+
+@app.get("/api/robotgame/file")
+async def api_robotgame_file():
+    return FileResponse(os.path.join(REPO, "out", "G4RobotGame.rbxmx"), filename="G4RobotGame.rbxmx")
+
+
 # ---- AI playtester that actually PLAYS the game in a real Play session ----
 LAST_GAME = {"prompt": "", "name": ""}
 LAST_BUILD = {"spec": {}, "modules": []}  # last segmented build, for the runtime-error oracle
