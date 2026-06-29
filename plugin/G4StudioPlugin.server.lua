@@ -234,17 +234,14 @@ local SERVER = "{{SERVER_URL}}"
 if not RunService:IsRunning() then return end
 if StudioTestService:GetTestArgs() ~= "G4PLAYTEST" then return end
 
-local camRemote = Instance.new("RemoteEvent"); camRemote.Name = "G4CamRemote"; camRemote.Parent = RS
-local camCF = nil
-camRemote.OnServerEvent:Connect(function(_, cf) camCF = cf end)
+local actionRemote = Instance.new("RemoteEvent"); actionRemote.Name = "G4Action"; actionRemote.Parent = RS
 
 task.spawn(function()
 	local plr = Players:GetPlayers()[1] or Players.PlayerAdded:Wait()
 	local char = plr.Character or plr.CharacterAdded:Wait()
 	local hum = char:WaitForChild("Humanoid")
 	local hrp = char:WaitForChild("HumanoidRootPart")
-	pcall(function() hrp:SetNetworkOwner(nil) end)
-	task.wait(1.5)
+	task.wait(2)
 	local function readState()
 		local ls = {}
 		local lsf = plr:FindFirstChild("leaderstats")
@@ -261,20 +258,11 @@ task.spawn(function()
 		end)
 		if not ok or not res.Success then break end
 		local data = HttpService:JSONDecode(res.Body)
-		local dir = Vector3.zero
-		if camCF then
-			local look = camCF.LookVector; look = Vector3.new(look.X, 0, look.Z); if look.Magnitude > 0 then look = look.Unit end
-			local rt = camCF.RightVector; rt = Vector3.new(rt.X, 0, rt.Z); if rt.Magnitude > 0 then rt = rt.Unit end
-			local a = data.action
-			if a == "forward" then dir = look elseif a == "back" then dir = -look
-			elseif a == "left" then dir = -rt elseif a == "right" then dir = rt end
-		end
-		hum:Move(dir, false)
-		if data.action == "jump" then hum.Jump = true end
+		actionRemote:FireAllClients(data.action or "wait")  -- client moves every frame
 		if data.done then verdict = data.verdict or verdict; score = data.score or score; break end
 		task.wait(0.35)
 	end
-	pcall(function() hum:Move(Vector3.zero) end)
+	actionRemote:FireAllClients("wait")
 	StudioTestService:EndTest({ verdict = verdict, score = score })
 end)
 ]==]
@@ -282,13 +270,35 @@ end)
 local TEST_CLIENT_SRC = [==[
 local Players = game:GetService("Players")
 local RS = game:GetService("ReplicatedStorage")
-local camRemote = RS:WaitForChild("G4CamRemote", 8)
-if not camRemote then return end
+local RunService = game:GetService("RunService")
+local player = Players.LocalPlayer
+local actionRemote = RS:WaitForChild("G4Action", 12)
+if not actionRemote then return end
+
+-- disable the default controls so they don't override our movement each frame
+pcall(function()
+	local pm = require(player:WaitForChild("PlayerScripts"):WaitForChild("PlayerModule"))
+	pm:GetControls():Disable()
+end)
+
+local currentAction = "wait"
+actionRemote.OnClientEvent:Connect(function(a) currentAction = a or "wait" end)
+
 local cam = workspace.CurrentCamera
-while camRemote and camRemote.Parent do
-	task.wait(0.2)
-	if cam then camRemote:FireServer(cam.CFrame) end
-end
+RunService.Heartbeat:Connect(function()
+	local char = player.Character
+	local hum = char and char:FindFirstChildOfClass("Humanoid")
+	if not hum then return end
+	local look = cam.CFrame.LookVector; look = Vector3.new(look.X, 0, look.Z); if look.Magnitude > 0 then look = look.Unit end
+	local rt = cam.CFrame.RightVector; rt = Vector3.new(rt.X, 0, rt.Z); if rt.Magnitude > 0 then rt = rt.Unit end
+	local a, dir = currentAction, Vector3.zero
+	if a == "forward" then dir = look
+	elseif a == "back" then dir = -look
+	elseif a == "left" then dir = -rt
+	elseif a == "right" then dir = rt
+	elseif a == "jump" then dir = look; hum.Jump = true end
+	hum:Move(dir, false)  -- applied EVERY frame -> smooth continuous movement
+end)
 ]==]
 
 local function placeTestScripts()
@@ -304,11 +314,12 @@ local function placeTestScripts()
 end
 
 local function removeTestScripts()
-	for _, where in ipairs({ game:GetService("ServerScriptService"):FindFirstChild("G4TestServer"),
-		game:GetService("StarterPlayer"):FindFirstChild("StarterPlayerScripts") and
-		game:GetService("StarterPlayer").StarterPlayerScripts:FindFirstChild("G4TestClient"),
-		game:GetService("ReplicatedStorage"):FindFirstChild("G4CamRemote") }) do
-		if where then where:Destroy() end
+	local s = game:GetService("ServerScriptService"):FindFirstChild("G4TestServer")
+	if s then s:Destroy() end
+	local SPS = game:GetService("StarterPlayer"):FindFirstChild("StarterPlayerScripts")
+	if SPS then
+		local c = SPS:FindFirstChild("G4TestClient")
+		if c then c:Destroy() end
 	end
 end
 
