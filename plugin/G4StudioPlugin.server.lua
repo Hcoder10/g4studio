@@ -34,7 +34,7 @@ local toolbar = plugin:CreateToolbar("G4 Studio")
 local button = toolbar:CreateButton("G4 Studio",
 	"Generate a playable obby with Gemma-4 on Cerebras", "rbxassetid://4458901886")
 
-local info = DockWidgetPluginGuiInfo.new(Enum.InitialDockState.Right, true, false, 360, 440, 320, 360)
+local info = DockWidgetPluginGuiInfo.new(Enum.InitialDockState.Right, true, false, 380, 580, 320, 420)
 local widget = plugin:CreateDockWidgetPluginGui("G4StudioWidget", info)
 widget.Title = "G4 Studio"
 
@@ -85,28 +85,16 @@ playBtn.TextColor3 = Color3.fromRGB(4, 18, 26); playBtn.Text = "🔬 Run & Fix"
 playBtn.LayoutOrder = 3; playBtn.Parent = bg
 local ptc = Instance.new("UICorner"); ptc.CornerRadius = UDim.new(0, 8); ptc.Parent = playBtn
 
-local agentList = Instance.new("ScrollingFrame")
-agentList.Size = UDim2.new(1, 0, 1, -150); agentList.BackgroundColor3 = Color3.fromRGB(10, 15, 23)
-agentList.BorderSizePixel = 0; agentList.ScrollBarThickness = 4
-agentList.AutomaticCanvasSize = Enum.AutomaticSize.Y; agentList.CanvasSize = UDim2.new()
-agentList.LayoutOrder = 4; agentList.Parent = bg
-local alc = Instance.new("UICorner"); alc.CornerRadius = UDim.new(0, 8); alc.Parent = agentList
-local alLayout = Instance.new("UIListLayout"); alLayout.Padding = UDim.new(0, 6)
-alLayout.SortOrder = Enum.SortOrder.LayoutOrder; alLayout.Parent = agentList
-local alPad = Instance.new("UIPadding")
-alPad.PaddingTop = UDim.new(0, 8); alPad.PaddingBottom = UDim.new(0, 8)
-alPad.PaddingLeft = UDim.new(0, 8); alPad.PaddingRight = UDim.new(0, 8); alPad.Parent = agentList
-
--- # agents — Slack-like channel where the agents talk + ping each other
+-- # agents — Slack-like MAIN channel where the agents talk + ping each other
 local chanTitle = Instance.new("TextLabel")
 chanTitle.Size = UDim2.new(1, 0, 0, 16); chanTitle.BackgroundTransparency = 1
 chanTitle.Font = Enum.Font.GothamBold; chanTitle.TextSize = 12
 chanTitle.TextXAlignment = Enum.TextXAlignment.Left
-chanTitle.TextColor3 = Color3.fromRGB(125, 141, 163); chanTitle.Text = "# agents"
+chanTitle.TextColor3 = Color3.fromRGB(125, 141, 163); chanTitle.Text = "#  agents"
 chanTitle.LayoutOrder = 5; chanTitle.Parent = bg
 
-local channel = Instance.new("ScrollingFrame")
-channel.Size = UDim2.new(1, 0, 0, 160); channel.BackgroundColor3 = Color3.fromRGB(13, 19, 28)
+local channel = Instance.new("ScrollingFrame")  -- fills the panel below the buttons
+channel.Size = UDim2.new(1, 0, 1, -266); channel.BackgroundColor3 = Color3.fromRGB(13, 19, 28)
 channel.BorderSizePixel = 0; channel.ScrollBarThickness = 4
 channel.AutomaticCanvasSize = Enum.AutomaticSize.Y; channel.CanvasSize = UDim2.new()
 channel.LayoutOrder = 6; channel.Parent = bg
@@ -178,30 +166,9 @@ local function addChannelMsg(name, text)
 	task.defer(function() channel.CanvasPosition = Vector2.new(0, 1e6) end)
 end
 
-local function upsertAgent(id, name, role)
-	local card = cards[id]
-	if not card then
-		cardOrder += 1
-		card = Instance.new("Frame")
-		card.Name = id; card.Size = UDim2.new(1, -2, 0, 44)
-		card.BackgroundColor3 = Color3.fromRGB(18, 26, 38); card.BorderSizePixel = 0
-		card.LayoutOrder = cardOrder; card.Parent = agentList
-		local cc = Instance.new("UICorner"); cc.CornerRadius = UDim.new(0, 6); cc.Parent = card
-		local bar = Instance.new("Frame"); bar.Name = "Bar"; bar.Size = UDim2.new(0, 3, 1, 0)
-		bar.BorderSizePixel = 0; bar.BackgroundColor3 = Color3.fromRGB(74, 163, 255); bar.Parent = card
-		local nm = Instance.new("TextLabel"); nm.Name = "NameL"; nm.BackgroundTransparency = 1
-		nm.Position = UDim2.new(0, 10, 0, 5); nm.Size = UDim2.new(1, -14, 0, 16)
-		nm.Font = Enum.Font.GothamBold; nm.TextSize = 13; nm.TextXAlignment = Enum.TextXAlignment.Left
-		nm.TextColor3 = Color3.fromRGB(230, 237, 243); nm.Parent = card
-		local st = Instance.new("TextLabel"); st.Name = "StatL"; st.BackgroundTransparency = 1
-		st.Position = UDim2.new(0, 10, 0, 22); st.Size = UDim2.new(1, -14, 0, 16)
-		st.Font = Enum.Font.Gotham; st.TextSize = 12; st.TextXAlignment = Enum.TextXAlignment.Left
-		st.TextColor3 = Color3.fromRGB(125, 141, 163); st.Parent = card
-		cards[id] = card
-	end
-	card.NameL.Text = (role and ("[" .. role .. "] ") or "") .. (name or id)
-	return card
-end
+-- Agent cards were replaced by the # agents channel; these are kept as safe no-ops so the
+-- existing event handlers (which still call them) don't error.
+local function upsertAgent(id, name, role) return nil end
 
 local function setWorking(id)
 	local card = cards[id]; if not card then return end

@@ -21,6 +21,10 @@ from .cerebras import CerebrasClient
 from .genre_common import emit_ev, post_channel
 from .validate import MATERIALS, PART_TYPES, find_api_issues
 
+DIRECTOR_SYSTEM = r"""You are the game DIRECTOR. Given a player's request, write a SHORT, punchy
+design brief (3-5 sentences) the team will build: the theme/vibe, the core moment-to-moment loop,
+2-3 key mechanics, and the ONE thing that makes it FUN. Be concrete and decisive. No code."""
+
 CODER_SYSTEM = r"""You are a master Roblox Luau engineer with FULL creative control. Author a complete
 game. You decide everything — there are no templates. Output it as THREE parts (so each runs in the
 right place), using these marker lines verbatim:
@@ -138,7 +142,21 @@ async def run_authored(prompt: str, client: CerebrasClient, on_event=None,
                        feedback=None) -> tuple[dict, dict]:
     t0 = time.perf_counter()
     turns = []
-    user = prompt if not feedback else prompt + "\n\nIMPROVE ON YOUR LAST ATTEMPT: " + feedback
+
+    # Director designs the game first — a brief the Coder builds to (and kicks off the channel).
+    post_channel(on_event, "director", "Director", "Sketching the design for this one… 🎬")
+    emit_ev(on_event, "agent", id="director", role="Director", name="Director", status="working")
+    dt = await client.chat([{"role": "system", "content": DIRECTOR_SYSTEM},
+                            {"role": "user", "content": prompt}], max_tokens=600, temperature=0.7)
+    turns.append(dt)
+    brief = (dt.text or "").strip()
+    emit_ev(on_event, "agent", id="director", status="done", detail=f"{round(dt.tokens_per_sec)} tok/s")
+    post_channel(on_event, "director", "Director",
+                 (brief[:260] + ("…" if len(brief) > 260 else "")) + "  @Coder build it! 🎮")
+
+    user = prompt + (("\n\nDIRECTOR'S BRIEF (follow this):\n" + brief) if len(brief) > 30 else "")
+    if feedback:
+        user += "\n\nIMPROVE ON YOUR LAST ATTEMPT: " + feedback
 
     post_channel(on_event, "coder", "Coder", "On it — drafting the whole game now (world + server + client). 🛠️")
     emit_ev(on_event, "agent", id="coder", role="Coder", name="Coder", status="working")
