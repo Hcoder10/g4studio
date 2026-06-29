@@ -30,11 +30,26 @@ end
 Players.PlayerAdded:Connect(giveClient)
 for _, p in ipairs(Players:GetPlayers()) do task.spawn(giveClient, p) end
 
--- a table to manipulate on, and the arm above it
+-- a sleek work surface + an enclosed arena (open toward the camera) so it reads as a separate stage
+local arena = Instance.new("Folder"); arena.Name = "Arena"; arena.Parent = workspace
 local tablePart = Instance.new("Part")
-tablePart.Name = "Table"; tablePart.Anchored = true; tablePart.Size = Vector3.new(16, 1, 16)
-tablePart.Position = Vector3.new(0, 0, 3); tablePart.Color = Color3.fromRGB(120, 105, 90)
-tablePart.Material = Enum.Material.WoodPlanks; tablePart.Parent = workspace
+tablePart.Name = "Table"; tablePart.Anchored = true; tablePart.Size = Vector3.new(15, 1, 14)
+tablePart.Position = Vector3.new(0, 0, 2.5); tablePart.Color = Color3.fromRGB(38, 41, 52)
+tablePart.Material = Enum.Material.SmoothPlastic; tablePart.Parent = arena
+local function neon(size, pos, color)
+	local p = Instance.new("Part"); p.Anchored = true; p.CanCollide = false; p.Size = size
+	p.Position = pos; p.Color = color or Color3.fromRGB(90, 170, 255); p.Material = Enum.Material.Neon
+	p.Parent = arena
+end
+neon(Vector3.new(15.4, 0.25, 14.4), Vector3.new(0, 0.6, 2.5), Color3.fromRGB(70, 150, 255))  -- table edge glow
+local function wall(size, pos)
+	local w = Instance.new("Part"); w.Anchored = true; w.Size = size; w.Position = pos
+	w.Color = Color3.fromRGB(24, 26, 34); w.Material = Enum.Material.SmoothPlastic; w.Parent = arena
+	neon(Vector3.new(size.X, 0.3, size.Z), pos + Vector3.new(0, size.Y / 2, 0))  -- top trim
+end
+wall(Vector3.new(16, 8, 1), Vector3.new(0, 4.5, -4.5))     -- back (far from camera)
+wall(Vector3.new(1, 8, 13), Vector3.new(-7.5, 4.5, 2.5))   -- left
+wall(Vector3.new(1, 8, 13), Vector3.new(7.5, 4.5, 2.5))    -- right
 local arm = SO101.new(workspace, CFrame.new(0, 1.5, -1))
 
 local latest = { target = nil :: Vector3?, grip = false, wristRoll = 0 }
@@ -93,7 +108,8 @@ local Game = require(kit:WaitForChild("Game"))
 local episode, epStart, ended
 local MASTER_AT = 2                   -- consecutive wins before Gemma forges a harder challenge
 local mastered, totalWins, winTimes = 0, 0, {}
-local extendGame, safeSetup           -- forward decls (defined after ctx)
+local live = false                       -- true only after the GO countdown (gates scoring/recording)
+local extendGame, safeSetup, startRound  -- forward decls (defined after ctx)
 local function newEpisode()
 	episode = Trace.new(Game.task or "so101_game", {
 		robot = "SO101", game = Game.name or "game", fps = 60,
@@ -152,16 +168,16 @@ function ctx.win(score: number?)
 	ended = true; ding(true); ctx.hud("✅ +" .. tostring(score or 0))
 	episode:finish(true, score or 1, SERVER)
 	totalWins += 1; mastered += 1; table.insert(winTimes, os.clock() - epStart)
-	task.delay(0.6, function()
+	task.delay(0.7, function()
 		if mastered >= MASTER_AT then mastered = 0; task.spawn(extendGame)
-		else clearScene(); ctx.state = {}; safeSetup(); newEpisode() end
+		else task.spawn(startRound) end
 	end)
 end
 function ctx.lose()
 	if ended then return end
 	ended = true; ding(false); mastered = 0  -- a loss breaks the mastery streak
 	episode:finish(false, 0, SERVER)
-	task.delay(0.6, function() clearScene(); ctx.state = {}; safeSetup(); newEpisode() end)
+	task.delay(0.7, function() task.spawn(startRound) end)
 end
 
 -- Gemma extends the curriculum: once a player MASTERS the current game, fetch a harder one and
@@ -190,12 +206,12 @@ local function fetchExtension()
 	return nil
 end
 function extendGame()
+	live = false
 	ctx.hud("🔥 MASTERED! Gemma is forging a harder challenge…")
 	local g, why = fetchExtension()
-	clearScene(); ctx.state = {}
-	if g then Game = g; ctx.hud("⚡ NEW CHALLENGE — " .. tostring(Game.name or ""))
-	elseif why == "loadstring" then ctx.hud("Enable LoadStringEnabled (Game Settings ▸ Security) to evolve games") end
-	safeSetup(); newEpisode()
+	if g then Game = g; ctx.hud("⚡ NEW CHALLENGE — " .. tostring(Game.name or "")); task.wait(0.8)
+	elseif why == "loadstring" then ctx.hud("Enable LoadStringEnabled (Game Settings ▸ Security) to evolve games"); task.wait(1) end
+	startRound()
 end
 
 -- run the game's setup safely: a buggy generated setup must not crash the robot/controls
@@ -207,16 +223,29 @@ function safeSetup()
 	end
 end
 
+-- start a round: build the scene, run a 3-2-1-GO countdown, THEN go live (scoring + recording)
+function startRound()
+	live = false
+	clearScene(); ctx.state = {}
+	safeSetup()
+	for _, n in ipairs({ "3", "2", "1", "GO!" }) do
+		hud:FireAllClients("count", n); task.wait(0.7)
+	end
+	hud:FireAllClients("count", "")
+	newEpisode()
+	live = true
+end
+
 -- boot
-clearScene(); ctx.state = {}; safeSetup(); newEpisode()
+task.spawn(startRound)
 
 RunService.Heartbeat:Connect(function(dt)
 	autoTagGraspables()
 	if latest.target then arm:solveTo(latest.target) end
 	arm:setTarget(5, latest.wristRoll)
 	arm:grip(latest.grip and 0 or 1)
-	arm:step(dt)
-	if ended then return end
+	arm:step(dt)            -- the arm is always controllable (you can pre-aim during the countdown)
+	if ended or not live then return end   -- but no scoring/recording until GO
 	ctx.t = os.clock() - epStart
 	local reward, subgoal = 0, "idle"
 	local ok, r, s = pcall(Game.step, ctx, dt)

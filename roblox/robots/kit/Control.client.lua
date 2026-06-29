@@ -21,8 +21,9 @@ end
 if player.Character then lockChar(player.Character) end
 player.CharacterAdded:Connect(lockChar)
 task.wait(0.2)
+local TweenService = game:GetService("TweenService")
 camera.CameraType = Enum.CameraType.Scriptable
-camera.CFrame = CFrame.lookAt(Vector3.new(10, 9.5, 12), Vector3.new(-1, 1.5, 3))
+camera.CFrame = CFrame.lookAt(Vector3.new(0, 8.5, 17), Vector3.new(0, 2.5, 2))  -- front-on into the arena
 
 local grip, wristRoll, hover = false, 0, 1.2  -- hover = gripper height above the table point
 local TABLE_TOP = 0.5                          -- table surface y (matches the harness table)
@@ -31,21 +32,45 @@ marker.Shape = Enum.PartType.Ball; marker.Size = Vector3.new(0.7, 0.7, 0.7)
 marker.Color = Color3.fromRGB(0, 255, 150); marker.Material = Enum.Material.Neon
 marker.Anchored = true; marker.CanCollide = false; marker.Transparency = 0.25; marker.Parent = workspace
 
-local gui = Instance.new("ScreenGui"); gui.ResetOnSpawn = false; gui.Parent = player:WaitForChild("PlayerGui")
-local top = Instance.new("TextLabel")
-top.Size = UDim2.new(0, 520, 0, 56); top.Position = UDim2.new(0.5, -260, 0, 14); top.AnchorPoint = Vector2.new(0, 0)
-top.BackgroundTransparency = 0.35; top.BackgroundColor3 = Color3.new(0, 0, 0)
-top.TextColor3 = Color3.fromRGB(120, 255, 180); top.Font = Enum.Font.GothamBlack; top.TextScaled = true
-top.Text = "Loading game…"; top.Parent = gui
-local hint = Instance.new("TextLabel")
-hint.Size = UDim2.new(0, 470, 0, 30); hint.Position = UDim2.new(0, 16, 1, -42)
-hint.BackgroundTransparency = 0.45; hint.BackgroundColor3 = Color3.new(0, 0, 0)
-hint.TextColor3 = Color3.new(1, 1, 1); hint.Font = Enum.Font.GothamMedium; hint.TextScaled = true
-hint.Text = "move mouse over the table → click to GRAB, move, click to DROP   ·   F/R lower/raise · Q/E wrist"
-hint.Parent = gui
+-- sleek UI ------------------------------------------------------------------
+local gui = Instance.new("ScreenGui"); gui.ResetOnSpawn = false; gui.IgnoreGuiInset = true
+gui.Parent = player:WaitForChild("PlayerGui")
+local function panel(size, pos, anchor)
+	local f = Instance.new("Frame"); f.Size = size; f.Position = pos; f.AnchorPoint = anchor or Vector2.new(0, 0)
+	f.BackgroundColor3 = Color3.fromRGB(15, 17, 24); f.BackgroundTransparency = 0.12; f.BorderSizePixel = 0
+	f.Parent = gui
+	local c = Instance.new("UICorner"); c.CornerRadius = UDim.new(0, 12); c.Parent = f
+	local s = Instance.new("UIStroke"); s.Color = Color3.fromRGB(70, 150, 255); s.Thickness = 1.5; s.Transparency = 0.35; s.Parent = f
+	return f
+end
+local topP = panel(UDim2.new(0, 580, 0, 62), UDim2.new(0.5, 0, 0, 18), Vector2.new(0.5, 0))
+local accent = Instance.new("Frame"); accent.Size = UDim2.new(0, 6, 1, -18); accent.Position = UDim2.new(0, 11, 0, 9)
+accent.BackgroundColor3 = Color3.fromRGB(70, 150, 255); accent.BorderSizePixel = 0; accent.Parent = topP
+Instance.new("UICorner", accent).CornerRadius = UDim.new(0, 3)
+local top = Instance.new("TextLabel"); top.BackgroundTransparency = 1; top.Size = UDim2.new(1, -34, 1, -16)
+top.Position = UDim2.new(0, 26, 0, 8); top.TextColor3 = Color3.fromRGB(236, 241, 255); top.Font = Enum.Font.GothamBold
+top.TextScaled = true; top.TextXAlignment = Enum.TextXAlignment.Left; top.Text = "Get ready…"; top.Parent = topP
+local hintP = panel(UDim2.new(0, 540, 0, 34), UDim2.new(0.5, 0, 1, -18), Vector2.new(0.5, 1))
+local hint = Instance.new("TextLabel"); hint.BackgroundTransparency = 1; hint.Size = UDim2.new(1, -20, 1, 0)
+hint.Position = UDim2.new(0, 10, 0, 0); hint.TextColor3 = Color3.fromRGB(168, 184, 214); hint.Font = Enum.Font.GothamMedium
+hint.TextScaled = true; hint.Text = "move mouse over the table  ·  click GRAB / DROP  ·  F/R height  ·  Q/E wrist"; hint.Parent = hintP
+local count = Instance.new("TextLabel"); count.AnchorPoint = Vector2.new(0.5, 0.5); count.Size = UDim2.new(0, 320, 0, 320)
+count.Position = UDim2.new(0.5, 0, 0.42, 0); count.BackgroundTransparency = 1; count.Text = ""
+count.TextColor3 = Color3.fromRGB(255, 255, 255); count.Font = Enum.Font.GothamBlack; count.TextScaled = true; count.Parent = gui
+local cstroke = Instance.new("UIStroke"); cstroke.Color = Color3.fromRGB(70, 150, 255); cstroke.Thickness = 3; cstroke.Parent = count
 
 hudRemote.OnClientEvent:Connect(function(kind, text)
-	if kind == "hud" then top.Text = text end
+	if kind == "hud" then
+		top.Text = text
+	elseif kind == "count" then
+		count.Text = text
+		if text ~= "" then
+			count.TextColor3 = (text == "GO!") and Color3.fromRGB(120, 255, 160) or Color3.fromRGB(255, 255, 255)
+			count.TextTransparency = 0; cstroke.Transparency = 0; count.Size = UDim2.new(0, 170, 0, 170)
+			TweenService:Create(count, TweenInfo.new(0.55, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+				{ Size = UDim2.new(0, 340, 0, 340), TextTransparency = 0.2 }):Play()
+		end
+	end
 end)
 
 UIS.InputBegan:Connect(function(i, gp)
