@@ -37,3 +37,8 @@ roblox/robots/meshes/stl/
 
 # generated LeRobot exports
 lerobot_datasets/
+
+# remotion demo
+video/node_modules/
+video/out/
+video/public/arm/
