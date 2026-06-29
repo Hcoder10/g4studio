@@ -27,7 +27,18 @@ CONTRACT = r"""ARCHITECTURE CONTRACT (follow EXACTLY so the pieces integrate):
   name in the SHARED REMOTES list. ALWAYS access them via
   game:GetService("ReplicatedStorage"):WaitForChild("G4Remotes"):WaitForChild("<Name>").
   NEVER create your own RemoteEvent and only use names from the SHARED REMOTES list.
-- Do NOT require another SYSTEM module (avoid cycles); communicate via shared modules + remotes.
+- Do NOT require another SYSTEM module (no cycles). Coordinate ACROSS systems with these shared
+  mechanisms (no cross-require needed; they also auto-replicate to clients):
+  * per-player state (gold, score, lives): player:SetAttribute("Gold", n) / player:GetAttribute("Gold")
+    — the client HUD reads it directly via GetAttribute + player:GetAttributeChangedSignal("Gold"),
+    so you usually do NOT need a remote for it.
+  * global state (baseHealth, currentWave, gameState): workspace:SetAttribute("BaseHealth", n)
+    (readable on the client too).
+  * game entities (enemies, pickups): tag each with
+    game:GetService("CollectionService"):AddTag(inst, "Enemy"); store per-entity data in attributes
+    (inst:SetAttribute("Health", n), inst:SetAttribute("PathProgress", p)); find them with
+    CollectionService:GetTagged("Enemy"); give the entity a PrimaryPart for position.
+  Use RemoteEvents (from the list) only for explicit client<->server requests/signals.
 - Only REAL Roblox API/Enums; never index a possibly-nil value; never loop without task.wait."""
 
 SHARED_SYSTEM = r"""You are building ONE shared ModuleScript for a Roblox game — it holds data
