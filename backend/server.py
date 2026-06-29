@@ -104,14 +104,17 @@ async def api_robotgame(req: Request):
     body = await req.json()
     family = (body.get("family") or "").strip()
     theme = (body.get("theme") or "").strip()
+    vision_qa = bool(body.get("vision_qa", False))   # screenshot QA is OPT-IN; reviewer is code-only
     client = CerebrasClient()
     try:
-        g = await (generate_in_family(client, family) if family else generate_robot_game(client, theme))
+        g = await (generate_in_family(client, family, vision_qa=vision_qa) if family
+                   else generate_robot_game(client, theme, vision_qa=vision_qa))
     finally:
         await client.aclose()
     path = _build_robot_game(g["source"])
     return {"design": g["design"], "compiles": g["compiles"],
-            "lines": g["source"].count("\n") + 1, "rbxmx": path}
+            "lines": g["source"].count("\n") + 1, "rbxmx": path,
+            "transcript": g.get("transcript", [])}
 
 
 @app.get("/api/robotgame/file")

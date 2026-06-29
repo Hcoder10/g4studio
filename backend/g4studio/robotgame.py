@@ -191,13 +191,13 @@ async def _repair_source(client: CerebrasClient, source: str) -> tuple[str, bool
     return source, (check(source) is None and ok)
 
 
-async def generate_in_family(client: CerebrasClient, family: str, on_event=None) -> dict:
+async def generate_in_family(client: CerebrasClient, family: str, on_event=None, vision_qa: bool = False) -> dict:
     """Generate a game inside a structured task FAMILY: steered to the family's skill, varied across
     the family's axes, and deduped against everything generated in that family so far."""
     from .families import FAMILIES, family_context, is_duplicate, load_registry, save_design
-    from .syntax import check
+    from .review_pipeline import build_reviewed
     if family not in FAMILIES:
-        return await generate_robot_game(client, family, on_event)  # fall back: treat as a theme
+        return await generate_robot_game(client, family, on_event, vision_qa)  # fall back: treat as a theme
     prior = load_registry().get(family, [])
     design = None
     for _ in range(3):  # resample until distinct from prior in this family
@@ -212,9 +212,10 @@ async def generate_in_family(client: CerebrasClient, family: str, on_event=None)
     save_design(family, design)
     if on_event:
         on_event({"type": "game_design", **design})
-    source = await code_game(client, design)
-    source, valid = await _repair_source(client, source)
-    return {"design": design, "source": source, "compiles": valid}
+    source, valid, transcript = await build_reviewed(client, design, vision=vision_qa, on_event=on_event)
+    if not valid:
+        source, valid = await _repair_source(client, source)  # last-resort hard repair
+    return {"design": design, "source": source, "compiles": valid, "transcript": transcript}
 
 
 EXTEND_SYSTEM = (
@@ -225,27 +226,31 @@ EXTEND_SYSTEM = (
 )
 
 
-async def extend_robot_game(client: CerebrasClient, prev: dict, stats: dict, on_event=None) -> dict:
+async def extend_robot_game(client: CerebrasClient, prev: dict, stats: dict, on_event=None,
+                            vision_qa: bool = False) -> dict:
     """Gemma forges the NEXT, harder challenge after a game is mastered. Returns {design, source, compiles}."""
-    from .syntax import check
+    from .review_pipeline import build_reviewed
     note = (f"Previous game (now mastered): '{prev.get('name')}' — skill: {prev.get('skill')}. "
             f"Player stats: {stats}. Design the next, harder challenge in this progression.")
     design, _ = await client.structured(EXTEND_SYSTEM, note, GAME_DESIGN_SCHEMA,
                                         name="game_design", max_tokens=700, temperature=0.95)
     if on_event:
         on_event({"type": "game_design", **design})
-    source = await code_game(client, design)
-    source, valid = await _repair_source(client, source)
-    return {"design": design, "source": source, "compiles": valid}
+    source, valid, transcript = await build_reviewed(client, design, vision=vision_qa, on_event=on_event)
+    if not valid:
+        source, valid = await _repair_source(client, source)
+    return {"design": design, "source": source, "compiles": valid, "transcript": transcript}
 
 
-async def generate_robot_game(client: CerebrasClient, theme: str = "", on_event=None) -> dict:
-    """Design + build one robot-manipulation game (with a syntax-repair loop). Returns
-    {design, source, compiles}."""
-    from .syntax import check
+async def generate_robot_game(client: CerebrasClient, theme: str = "", on_event=None,
+                              vision_qa: bool = False) -> dict:
+    """Design + build one robot-manipulation game via the Coder->Builder->Reviewer->revise pipeline.
+    Returns {design, source, compiles, transcript}."""
+    from .review_pipeline import build_reviewed
     design = await design_game(client, theme)
     if on_event:
         on_event({"type": "game_design", **design})
-    source = await code_game(client, design)
-    source, valid = await _repair_source(client, source)
-    return {"design": design, "source": source, "compiles": valid}
+    source, valid, transcript = await build_reviewed(client, design, vision=vision_qa, on_event=on_event)
+    if not valid:
+        source, valid = await _repair_source(client, source)  # last-resort hard repair
+    return {"design": design, "source": source, "compiles": valid, "transcript": transcript}

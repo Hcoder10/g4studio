@@ -41,7 +41,7 @@ SO101.CHAIN = {
     { name = "gripper", pos = Vector3.new(0.6666, 0.6204, -0.7722), rpy = { 1.570800, -0.000000, -0.000000 }, axis = Vector3.new(0, 0, 1), lo = -10.0, hi = 100.0, mesh = "jaw" },
 }
 SO101.N = #SO101.CHAIN
-SO101.SPEED_DEG = 420   -- joint speed cap; high = snappy mouse-following
+SO101.SPEED_DEG = 340   -- joint speed cap; snappy but smooth (jitter fixed by the absolute pan)
 SO101.GRIP_CLOSED, SO101.GRIP_OPEN = 0.0, 55.0  -- joint-6 deg for grip(0) .. grip(1)
 
 local UPFIX = CFrame.Angles(-math.pi / 2, 0, 0)  -- URDF Z-up -> Roblox Y-up
@@ -61,11 +61,12 @@ SO101.MESH_OFFSET = {
 }
 
 -- IK tuning (damped least squares + null-space posture + joint-limit clamping)
-local IK_ITERS = 8        -- DLS iterations per solve
+local PAN_REF = Vector3.new(1, 0, 0)  -- world reference dir for the absolute pan azimuth
+local IK_ITERS = 10       -- DLS iterations per solve
 local IK_TOL = 0.08       -- stop once the tip is within this many studs of the target
-local IK_LAMBDA2 = 0.6    -- DLS damping^2 — singularity robustness (higher = smoother/slower)
+local IK_LAMBDA2 = 0.7    -- DLS damping^2 — singularity robustness (higher = smoother/slower)
 local IK_STEP = 2.0       -- cap the tip error used per iteration (studs) -> bounded joint steps
-local IK_POSTURE = 0.12   -- null-space pull toward the rest pose; lives in the REDUNDANT DOF only,
+local IK_POSTURE = 0.18   -- null-space pull toward the rest pose; lives in the REDUNDANT DOF only,
                           -- so it shapes posture WITHOUT moving the tip off target.
 -- the natural pose the redundant freedom resolves toward (deg). This is the DOWN-reaching branch
 -- (j2 positive) so the arm can pick things at/below the base; the up branch (j2 negative) can't.
@@ -169,6 +170,20 @@ function SO101.new(parent: Instance, baseCFrame: CFrame?)
     self.tip.Transparency = 0.35  -- VISIBLE: this is the actual grasp point (align it with the object)
 
     self:_fk()
+    -- pan calibration: the arm's forward azimuth (about the pan axis, vs world-X) at pan=0, so
+    -- solveTo can command an ABSOLUTE pan that faces the target rather than chasing it.
+    self.panOffset = 0
+    do
+        local F, tip = fkFrames(self.base, { 0, IK_REST[2], IK_REST[3], IK_REST[4], IK_REST[5], self.gripper })
+        local pv = F[1].Position
+        local axisW = F[1]:VectorToWorldSpace(SO101.CHAIN[1].axis).Unit
+        local d = tip - pv; d = d - axisW * d:Dot(axisW)
+        local ref = PAN_REF - axisW * PAN_REF:Dot(axisW)
+        if d.Magnitude > 0.3 and ref.Magnitude > 1e-3 then
+            ref = ref.Unit
+            self.panOffset = math.deg(math.atan2(ref:Cross(d):Dot(axisW), ref:Dot(d)))
+        end
+    end
     return self
 end
 
@@ -227,16 +242,19 @@ function SO101:solveTo(worldTarget: Vector3)
     if dist > 8.4 then worldTarget = sh + d0 * (8.4 / dist)
     elseif dist > 1e-3 and dist < 2.6 then worldTarget = sh + d0 * (2.6 / dist) end
 
-    -- PAN (joint 1): rotate the base to FACE the target — one analytic step, smoothed by step(), so
-    -- the base swings around cleanly instead of the IK thrashing it.
+    -- PAN (joint 1): set the base to the ABSOLUTE angle that faces the target, then lerp toward it.
+    -- (The old code measured the angle from the lagging *tip* and added it incrementally, so the
+    -- command led the arm, overshot, and oscillated — that was the jitter. Absolute = stable swing.)
     do
         local pv = self.linkCF[1].Position
         local axisW = self.linkCF[1]:VectorToWorldSpace(SO101.CHAIN[1].axis).Unit
-        local toTip = self.tip.Position - pv; toTip = toTip - axisW * toTip:Dot(axisW)
-        local toTgt = worldTarget - pv; toTgt = toTgt - axisW * toTgt:Dot(axisW)
-        if toTip.Magnitude > 0.4 and toTgt.Magnitude > 0.4 then
-            local ang = math.deg(math.atan2(toTip:Cross(toTgt):Dot(axisW), toTip:Dot(toTgt)))
-            self.targets[1] = math.clamp(self.targets[1] + ang, SO101.CHAIN[1].lo, SO101.CHAIN[1].hi)
+        local d = worldTarget - pv; d = d - axisW * d:Dot(axisW)
+        local ref = PAN_REF - axisW * PAN_REF:Dot(axisW)
+        if d.Magnitude > 0.5 and ref.Magnitude > 1e-3 then
+            ref = ref.Unit
+            local az = math.deg(math.atan2(ref:Cross(d):Dot(axisW), ref:Dot(d)))
+            local desired = math.clamp(az - self.panOffset, SO101.CHAIN[1].lo, SO101.CHAIN[1].hi)
+            self.targets[1] = self.targets[1] + (desired - self.targets[1]) * 0.35
         end
     end
 

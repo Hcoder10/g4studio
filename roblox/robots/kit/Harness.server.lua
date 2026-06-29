@@ -133,16 +133,28 @@ ctx.state = {}
 function ctx.holding() return arm.grasped end
 function ctx.dist(a, b) return (a - b).Magnitude end
 function ctx.rand(lo, hi) return lo + math.random() * (hi - lo) end
+-- keep every spawned object inside the reachable cell and resting ON the table, no matter what the
+-- generated game asks for (pulls out-of-reach spots in; lifts anything that would spawn below/in the
+-- table). This is why placement is reliable even when Gemma picks awkward coordinates.
+local CELL_TOP = 0.5
+local function clampToCell(pos: Vector3, halfH: number): Vector3
+	local c = REGION.center
+	local dx, dz = pos.X - c.X, pos.Z - c.Z
+	local r = math.sqrt(dx * dx + dz * dz)
+	local rmax = REGION.reach * 0.82
+	if r > rmax and r > 1e-4 then dx, dz = dx * rmax / r, dz * rmax / r end
+	return Vector3.new(c.X + dx, math.max(pos.Y, CELL_TOP + (halfH or 0.5)), c.Z + dz)
+end
 function ctx.spawnCube(pos: Vector3, color: Color3?, size: number?)
 	local s = size or 1
 	local c = Instance.new("Part"); c.Name = "Cube"; c.Size = Vector3.new(s, s, s); c.Anchored = false
 	c.Color = color or Color3.fromRGB(255, 170, 0); c.Material = Enum.Material.SmoothPlastic
-	c.Position = pos; c.Parent = sceneFolder; CollectionService:AddTag(c, "Graspable")
+	c.Position = clampToCell(pos, s / 2); c.Parent = sceneFolder; CollectionService:AddTag(c, "Graspable")
 	return c
 end
 function ctx.spawnBin(pos: Vector3, color: Color3?, size: Vector3?)
 	local b = Instance.new("Part"); b.Name = "Bin"; b.Anchored = true
-	b.Size = size or Vector3.new(2.5, 1, 2.5); b.Position = pos
+	b.Size = size or Vector3.new(2.5, 1, 2.5); b.Position = clampToCell(pos, b.Size.Y / 2)
 	b.Color = color or Color3.fromRGB(0, 170, 90); b.Material = Enum.Material.SmoothPlastic; b.Parent = sceneFolder
 	return b
 end
@@ -152,6 +164,7 @@ function ctx.spawnPart(props)
 		if k == "Color3" then k = "Color" end            -- common slip: the property is Color
 		pcall(function() (p :: any)[k] = v end)          -- ignore unknown props, never crash the round
 	end
+	if props.Position then p.Position = clampToCell(p.Position, p.Size.Y / 2) end  -- keep it reachable
 	return p
 end
 function ctx.makeGraspable(p: BasePart) CollectionService:AddTag(p, "Graspable") end
