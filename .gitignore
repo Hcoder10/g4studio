@@ -21,3 +21,7 @@ out/
 *.log
 .DS_Store
 Thumbs.db
+
+# asset RAG embedding cache + downloaded thumbnails (regenerated locally)
+*.npy
+backend/assets/thumbs/

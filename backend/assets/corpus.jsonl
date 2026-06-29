@@ -1,0 +1,36 @@
+{"id": "rbxassetid://SEED-tower-stone", "name": "Stone Defense Tower", "description": "A tall medieval stone turret with battlements, good for a tower defense base tower", "type": "mesh", "tags": ["tower", "defense", "medieval", "stone", "turret"]}
+{"id": "rbxassetid://SEED-tower-cannon", "name": "Cannon Tower", "description": "An iron cannon mounted on a stone platform that fires cannonballs", "type": "model", "tags": ["tower", "cannon", "artillery", "defense"]}
+{"id": "rbxassetid://SEED-tower-archer", "name": "Archer Outpost", "description": "A wooden outpost with an archer, fires arrows at range", "type": "model", "tags": ["tower", "archer", "wood", "ranged"]}
+{"id": "rbxassetid://SEED-tower-mage", "name": "Wizard Spire", "description": "A glowing magic spire that casts area-of-effect spells", "type": "model", "tags": ["tower", "mage", "magic", "spire", "aoe"]}
+{"id": "rbxassetid://SEED-enemy-zombie", "name": "Zombie", "description": "A shambling undead zombie enemy that walks toward the base", "type": "model", "tags": ["enemy", "zombie", "undead", "monster"]}
+{"id": "rbxassetid://SEED-enemy-goblin", "name": "Goblin Raider", "description": "A small fast green goblin with a dagger", "type": "model", "tags": ["enemy", "goblin", "fast", "fantasy"]}
+{"id": "rbxassetid://SEED-enemy-orc", "name": "Orc Brute", "description": "A heavy armored orc with high health, slow tank enemy", "type": "model", "tags": ["enemy", "orc", "tank", "armored"]}
+{"id": "rbxassetid://SEED-enemy-dragon", "name": "Boss Dragon", "description": "A massive winged fire dragon, end-of-wave boss", "type": "model", "tags": ["enemy", "boss", "dragon", "flying", "fire"]}
+{"id": "rbxassetid://SEED-prop-tree-pine", "name": "Pine Tree", "description": "A low-poly evergreen pine tree for forest scenery", "type": "mesh", "tags": ["nature", "tree", "pine", "forest", "scenery"]}
+{"id": "rbxassetid://SEED-prop-rock", "name": "Mossy Boulder", "description": "A large mossy grey rock for terrain decoration", "type": "mesh", "tags": ["nature", "rock", "boulder", "scenery"]}
+{"id": "rbxassetid://SEED-prop-castle", "name": "Castle Keep", "description": "A stone castle keep with towers and a gate, fits as the base to defend", "type": "model", "tags": ["structure", "castle", "base", "medieval"]}
+{"id": "rbxassetid://SEED-prop-barrel", "name": "Wooden Barrel", "description": "A wooden barrel prop for villages and camps", "type": "mesh", "tags": ["prop", "barrel", "wood", "village"]}
+{"id": "rbxassetid://SEED-prop-coin", "name": "Gold Coin", "description": "A spinning gold coin pickup for currency and rewards", "type": "mesh", "tags": ["currency", "coin", "gold", "pickup", "economy"]}
+{"id": "rbxassetid://SEED-prop-path", "name": "Cobblestone Path Tile", "description": "A cobblestone road tile to lay enemy paths", "type": "mesh", "tags": ["path", "road", "cobblestone", "track"]}
+{"id": "rbxassetid://SEED-prop-car", "name": "Sports Car", "description": "A sleek red sports car model for racing games", "type": "model", "tags": ["vehicle", "car", "racing", "sports"]}
+{"id": "rbxassetid://SEED-prop-sword", "name": "Steel Sword", "description": "A sharp steel longsword tool for combat games", "type": "model", "tags": ["weapon", "sword", "melee", "combat"]}
+{"id": "rbxassetid://SEED-prop-gun", "name": "Laser Blaster", "description": "A sci-fi energy blaster pistol that shoots lasers", "type": "model", "tags": ["weapon", "gun", "laser", "scifi"]}
+{"id": "rbxassetid://SEED-prop-chest", "name": "Treasure Chest", "description": "A wooden treasure chest with gold, openable reward", "type": "model", "tags": ["prop", "chest", "treasure", "reward"]}
+{"id": "rbxassetid://SEED-decal-grass", "name": "Grass Texture", "description": "A seamless green grass ground texture decal", "type": "decal", "tags": ["texture", "grass", "ground", "terrain"]}
+{"id": "rbxassetid://SEED-decal-lava", "name": "Lava Texture", "description": "A glowing molten lava texture for hazards and volcano maps", "type": "decal", "tags": ["texture", "lava", "hazard", "fire"]}
+{"id": "rbxassetid://SEED-decal-brick", "name": "Brick Wall Texture", "description": "A red brick wall texture decal for buildings", "type": "decal", "tags": ["texture", "brick", "wall", "building"]}
+{"id": "rbxassetid://SEED-decal-target", "name": "Target Marker", "description": "A red and white circular target decal for tower range or aiming", "type": "decal", "tags": ["ui", "target", "marker", "range"]}
+{"id": "rbxassetid://SEED-audio-battle", "name": "Epic Battle Music", "description": "Orchestral looping battle music for intense waves", "type": "audio", "tags": ["music", "battle", "epic", "loop", "combat"]}
+{"id": "rbxassetid://SEED-audio-lobby", "name": "Calm Lobby Theme", "description": "Relaxed ambient music for the lobby and menus", "type": "audio", "tags": ["music", "lobby", "ambient", "calm", "menu"]}
+{"id": "rbxassetid://SEED-audio-victory", "name": "Victory Fanfare", "description": "A triumphant fanfare jingle played on winning", "type": "audio", "tags": ["music", "victory", "win", "fanfare", "jingle"]}
+{"id": "rbxassetid://SEED-audio-explosion", "name": "Explosion SFX", "description": "A loud explosion sound effect for impacts and deaths", "type": "audio", "tags": ["sfx", "explosion", "impact", "boom"]}
+{"id": "rbxassetid://SEED-audio-coin", "name": "Coin Pickup SFX", "description": "A bright coin collect chime sound effect", "type": "audio", "tags": ["sfx", "coin", "pickup", "chime", "economy"]}
+{"id": "rbxassetid://SEED-audio-arrow", "name": "Arrow Shoot SFX", "description": "A whoosh sound of an arrow being fired", "type": "audio", "tags": ["sfx", "arrow", "shoot", "whoosh", "ranged"]}
+{"id": "rbxassetid://SEED-audio-cannon", "name": "Cannon Fire SFX", "description": "A deep cannon blast sound effect", "type": "audio", "tags": ["sfx", "cannon", "fire", "blast"]}
+{"id": "rbxassetid://SEED-audio-click", "name": "UI Click SFX", "description": "A crisp button click sound for menus and buttons", "type": "audio", "tags": ["sfx", "ui", "click", "button"]}
+{"id": "rbxassetid://SEED-vfx-explosion", "name": "Explosion Particle", "description": "A fiery explosion particle burst effect for impacts", "type": "vfx", "tags": ["particle", "explosion", "fire", "burst", "impact"]}
+{"id": "rbxassetid://SEED-vfx-fire", "name": "Fire Particle", "description": "A looping flame particle emitter for torches and burning", "type": "vfx", "tags": ["particle", "fire", "flame", "torch", "loop"]}
+{"id": "rbxassetid://SEED-vfx-smoke", "name": "Smoke Particle", "description": "A grey smoke puff particle effect", "type": "vfx", "tags": ["particle", "smoke", "puff"]}
+{"id": "rbxassetid://SEED-vfx-magic", "name": "Magic Sparkle", "description": "A glowing blue magic sparkle particle for spells and pickups", "type": "vfx", "tags": ["particle", "magic", "sparkle", "glow", "spell"]}
+{"id": "rbxassetid://SEED-vfx-heal", "name": "Heal Aura", "description": "A green healing aura particle ring around a unit", "type": "vfx", "tags": ["particle", "heal", "aura", "green", "support"]}
+{"id": "rbxassetid://SEED-vfx-muzzle", "name": "Muzzle Flash", "description": "A quick muzzle flash spark for guns firing", "type": "vfx", "tags": ["particle", "muzzle", "flash", "gun", "spark"]}
