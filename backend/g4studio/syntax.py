@@ -89,14 +89,23 @@ compile — do not change behavior or remove features. Output ONLY the corrected
 async def run_syntax_repair(modules: list[dict], client, on_event=None) -> list[dict]:
     if not _ensure():
         return modules  # no checker available -> skip gracefully
-    rnd = 0
-    while client.runs < client.max_runs - 2:  # only the global run budget caps this
+    rnd, prev, stuck = 0, None, 0
+    while client.runs < client.max_runs - 2:  # capped by the global run budget
         rnd += 1
         bad = [(m, err) for m in modules if (err := check(m["source"]))]
         if not bad:
             if rnd > 1:
                 post_channel(on_event, "syntax", "Luau Compiler", "Every module compiles cleanly ✅")
             break
+        if prev is not None and len(bad) >= prev:  # no progress -> stop
+            stuck += 1
+            if stuck >= 2:
+                post_channel(on_event, "syntax", "Luau Compiler",
+                             f"{len(bad)} module(s) still won't compile after retries — moving on.")
+                break
+        else:
+            stuck = 0
+        prev = len(bad)
         emit_ev(on_event, "agent", id="syntax", role="QA", name="Luau Compiler",
                 status="done", detail=f"round {rnd}: {len(bad)} compile error(s)")
         post_channel(on_event, "syntax", "Luau Compiler", f"Round {rnd}: {len(bad)} module(s) won't compile — "

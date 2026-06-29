@@ -19,8 +19,29 @@ import re
 import time
 
 from .cerebras import CerebrasClient
-from .genre_common import emit_ev, post_channel
+from .genre_common import emit_ev, post_channel, voice
 from .validate import MATERIALS, PART_TYPES, find_api_issues
+
+SYNTAX_FIX_SYSTEM = r"""You are fixing a Luau COMPILE error in a Roblox script. The Luau compiler
+reported the exact error (line, column, reason). Fix ONLY what is needed to make it compile —
+change nothing else. Output ONLY the corrected Luau."""
+
+
+async def _compile_fix(name: str, src: str, client: CerebrasClient, on_event) -> str:
+    """Free deterministic gate: run the real Luau compiler; ONE bounded repair if it won't compile."""
+    from .syntax import check  # lazy import to avoid a circular import
+    if len((src or "").strip()) < 30:
+        return src
+    err = check(src)
+    if not err:
+        return src
+    post_channel(on_event, "validator", "Validator", f"The {name} script won't compile ({err[:70]}) — fixing 🔧")
+    t = await client.chat([{"role": "system", "content": SYNTAX_FIX_SYSTEM},
+                           {"role": "user", "content": f"Luau compile error in this {name} script: {err}\n\n"
+                            f"Fix it so it compiles, change nothing else:\n{src}"}],
+                          max_tokens=14000, temperature=0.2)
+    fixed = _force_fix(_strip_fences(t.text or ""))
+    return fixed if (len(fixed) > 30 and check(fixed) is None) else src
 
 DIRECTOR_SYSTEM = r"""You are the game DIRECTOR. Given a player's request, write a SHORT, punchy
 design brief (3-5 sentences) the team will build: the theme/vibe, the core moment-to-moment loop,
@@ -185,44 +206,11 @@ async def run_authored(prompt: str, client: CerebrasClient, on_event=None,
     lines0 = raw.count("\n") + 1
     emit_ev(on_event, "agent", id="coder", status="done",
             detail=f"{lines0} lines · {round(ct.tokens_per_sec)} tok/s")
-    post_channel(on_event, "coder", "Coder",
-                 f"Done — {lines0} lines across BUILD/SERVER/CLIENT. Passing it to the specialists 🙌")
+    await voice(client, on_event, "coder", "Coder", "lead engineer",
+                f"You just wrote the whole game in one pass ({lines0} lines: a BUILD world + SERVER gameplay "
+                f"+ CLIENT UI) from the brief. Hand it to the Reviewer to check it holds together.",
+                team="Director, Reviewer, Validator, Playtester")
 
-    # --- Specialist team: each improves ONE part (parallel) so several engineers touch the game ---
-    t0_title, b0, s0, c0 = _split_sections(raw)
-    if b0 and s0:
-        ctx = f"-- BUILD --\n{b0}\n\n-- SERVER --\n{s0}\n\n-- CLIENT --\n{c0}"
-
-        async def specialist(section, sys_prompt, current, aid, name, intro, outro):
-            if len((current or "").strip()) < 20:
-                return current, None
-            emit_ev(on_event, "agent", id=aid, role="Coder", name=name, status="working")
-            post_channel(on_event, aid, name, intro)
-            t = await client.chat(
-                [{"role": "system", "content": sys_prompt},
-                 {"role": "user", "content": f"FULL GAME for context:\n{ctx}\n\nImprove ONLY the {section} "
-                  f"part. Stay consistent with the other parts (same names/attributes/RemoteEvents/"
-                  f"waypoints). Output ONLY the new {section} Luau."}],
-                max_tokens=14000, temperature=0.6)
-            out = re.sub(r"^\s*--\s*=+.*?=+\s*\n", "", _force_fix(_strip_fences(t.text or "")))
-            emit_ev(on_event, "agent", id=aid, status="done", detail=f"{round(t.tokens_per_sec)} tok/s")
-            post_channel(on_event, aid, name, outro)
-            return (out if len(out.strip()) > 30 else current), t
-
-        (b1, tb), (s1, ts), (c1, tc) = await asyncio.gather(
-            specialist("BUILD", LEVEL_SYSTEM, b0, "level", "Level Designer",
-                       "On the world — making the map dense + atmospheric. 🏗️", "@Reviewer world's much richer now."),
-            specialist("SERVER", GAMEPLAY_SYSTEM, s0, "gameplay", "Gameplay Engineer",
-                       "Deepening the core mechanics + feedback… ⚙️", "@Reviewer combat's got more depth."),
-            specialist("CLIENT", FX_SYSTEM, c0, "fx", "FX Artist",
-                       "Adding juice — particles, sounds, shake, popups. ✨", "@Reviewer wired up the game feel."))
-        for t in (tb, ts, tc):
-            if t:
-                turns.append(t)
-        raw = (f"-- TITLE: {t0_title}\n-- ===== BUILD =====\n{b1}\n"
-               f"-- ===== SERVER =====\n{s1}\n-- ===== CLIENT =====\n{c1}")
-
-    post_channel(on_event, "coder", "Coder", "@Reviewer specialists are done — can you review the whole thing? 🔍")
     emit_ev(on_event, "agent", id="qa", role="QA", name="Reviewer", status="working")
     qt = await client.chat(
         [{"role": "system", "content": QA_SYSTEM},
@@ -233,8 +221,10 @@ async def run_authored(prompt: str, client: CerebrasClient, on_event=None,
     if len(fixed) < 200:
         fixed = raw
     emit_ev(on_event, "agent", id="qa", status="done", detail=f"reviewed · {round(qt.tokens_per_sec)} tok/s")
-    post_channel(on_event, "qa", "Reviewer",
-                 "@Coder reviewed it end-to-end and tightened a few things. @Validator can you sweep the Roblox API + enums? 🔍")
+    await voice(client, on_event, "qa", "Reviewer", "code reviewer",
+                f"You just reviewed the whole game against the request ('{prompt[:110]}') and fixed the bugs "
+                f"you found. Hand off to the Validator to sweep the Roblox API/enums.",
+                team="Coder, Validator, Playtester")
 
     # API validation on the combined text, then the model repairs (stays in control)
     issues = find_api_issues(fixed)
@@ -257,6 +247,12 @@ async def run_authored(prompt: str, client: CerebrasClient, on_event=None,
     if not build_src and not server_src:  # markers missing -> treat whole as a runtime server script
         server_src = _strip_fences(fixed)
     build_src, server_src, client_src = _force_fix(build_src), _force_fix(server_src), _force_fix(client_src)
+
+    # Free deterministic gate: the real Luau compiler. Repair only a part that won't compile.
+    build_src = await _compile_fix("BUILD", build_src, client, on_event)
+    server_src = await _compile_fix("SERVER", server_src, client, on_event)
+    client_src = await _compile_fix("CLIENT", client_src, client, on_event)
+    post_channel(on_event, "validator", "Validator", "API + enums clean, all three scripts compile ✅")
 
     build = {"authored": True, "name": title, "build": build_src,
              "server": server_src, "client": client_src}

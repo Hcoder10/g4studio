@@ -383,9 +383,10 @@ async def generate_game(prompt: str, client: Optional[CerebrasClient] = None,
         if force_genre in ("obby", "simulator", "custom", "segmented", "authored"):
             genre = force_genre
         else:
-            # multi-system games -> the Director deploys a team of subagents (one per system),
-            # who coordinate in the channel; single-scene games -> one cohesive author.
-            genre = "segmented" if await classify_complexity(client, prompt) == "complex" else "authored"
+            # v4: ONE cohesive author writes the whole game (Gemma-4's strength), with a small team
+            # (Director/Reviewer/Playtester) + free deterministic gates. The subagent harness is
+            # opt-in only (force_genre="segmented") — it cost too many tokens and didn't converge.
+            genre = "authored"
         _emit(on_event, "genre", genre=genre)
 
         if genre == "segmented":

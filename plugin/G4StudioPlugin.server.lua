@@ -414,8 +414,8 @@ end
 
 local function runStudioVision(build, server, client)
 	task.spawn(function()
-		local current = build
-		for attempt = 0, 9 do  -- keep revising the map until it's actually good (>=6/10)
+		local current, best, stuck = build, -1, 0
+		for attempt = 0, 3 do  -- bounded: revise the map until >=6/10 or it stops improving
 			task.wait(attempt == 0 and 1.2 or 0.6)  -- let the first build render
 			local ok, res = pcall(function()
 				return HttpService:RequestAsync({
@@ -436,6 +436,16 @@ local function runStudioVision(build, server, client)
 				addChannelMsg("Playtester", "Map looks good now ✅ @Coder nice work.")
 				break
 			end
+			if score <= best then  -- not improving -> stop grinding
+				stuck = stuck + 1
+				if stuck >= 2 then
+					addChannelMsg("Playtester", string.format("Map's not improving past %d/10 — shipping it.", score))
+					break
+				end
+			else
+				stuck = 0
+			end
+			best = math.max(best, score)
 			if data.revised_build and #data.revised_build > 80 then
 				addChannelMsg("Reviser", string.format("@Coder map's only %s/10 — rebuilding the world richer… 🔧", tostring(data.score)))
 				current = data.revised_build

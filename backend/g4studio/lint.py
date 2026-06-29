@@ -78,12 +78,19 @@ async def run_lint_repair(modules: list[dict], client, on_event=None) -> list[di
     for m in modules:
         m["source"] = autofix(m["source"])
 
-    rnd = 0
-    while client.runs < client.max_runs - 3:  # only the global run budget caps this
+    rnd, prev, stuck = 0, None, 0
+    while client.runs < client.max_runs - 3:  # capped by the global run budget
         rnd += 1
         issues = lint(modules)
         if not issues:
             break
+        if prev is not None and len(issues) >= prev:  # no progress -> stop
+            stuck += 1
+            if stuck >= 2:
+                break
+        else:
+            stuck = 0
+        prev = len(issues)
         emit_ev(on_event, "agent", id="lint", role="QA", name="Runtime Linter",
                 status="done", detail=f"round {rnd}: {len(issues)} runtime issue(s)")
         by_mod: dict[str, list[str]] = {}

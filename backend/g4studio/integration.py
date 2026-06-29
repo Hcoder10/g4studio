@@ -143,13 +143,22 @@ async def run_verify_repair(spec: dict, modules: list[dict], client: CerebrasCli
                             on_event=None) -> list[dict]:
     """Deterministic verify -> targeted repair, looped until the modules mechanically agree (or the
     team's run budget runs out). Also unions every used remote into spec.shared_remotes."""
-    rnd = 0
-    while client.runs < client.max_runs - 3:  # only the global run budget caps this
+    rnd, prev, stuck = 0, None, 0
+    while client.runs < client.max_runs - 3:  # capped by the global run budget
         rnd += 1
         issues, remotes_used = verify(spec, modules)
         spec["shared_remotes"] = sorted(set(spec.get("shared_remotes", [])) | remotes_used)
         if not issues:
             break
+        if prev is not None and len(issues) >= prev:  # no progress -> the fixers can't resolve it
+            stuck += 1
+            if stuck >= 2:
+                post_channel(on_event, "verify", "Verifier",
+                             f"{len(issues)} mismatch(es) I can't auto-reconcile — moving on.")
+                break
+        else:
+            stuck = 0
+        prev = len(issues)
         emit_ev(on_event, "agent", id="verify", role="QA", name="Integration Verifier",
                 status="done", detail=f"round {rnd}: {len(issues)} mismatch(es)")
         post_channel(on_event, "verify", "Verifier", f"Round {rnd}: {len(issues)} cross-file mismatch(es) — "

@@ -177,7 +177,7 @@ async def api_vision(req: Request):
         issues = [str(x) for x in (crit.get("issues") or [])][:4]
         verdict = str(crit.get("verdict", ""))
         out = {"score": score, "issues": issues, "verdict": verdict}
-        if score < 6 and attempt < 9 and len(build_src) > 50:
+        if score < 6 and attempt < 3 and len(build_src) > 50:
             rv = await client.chat(
                 [{"role": "system", "content": REVISE_SYSTEM},
                  {"role": "user", "content":
