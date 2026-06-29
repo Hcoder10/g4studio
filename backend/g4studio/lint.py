@@ -56,6 +56,15 @@ def lint(modules: list[dict]) -> list[dict]:
             issues.append({"module": nm, "detail":
                 f'{nm} has a `while true do` loop with NO task.wait inside — it will freeze the game. '
                 f'Add a task.wait() in every unbounded loop.'})
+        moves = ("Heartbeat" in src or "RenderStepped" in src or "Stepped" in src
+                 or re.search(r'PrimaryPart\.CFrame\s*=', src) or ":Lerp(" in src or ":MoveTo(" in src)
+        if "LoadAsset" in src and ":AddTag(" in src and moves:
+            issues.append({"module": nm, "detail":
+                f'{nm} builds a MOVING gameplay entity from a MODEL asset (InsertService:LoadAsset) and '
+                f'tags it (CollectionService:AddTag). LoadAsset models have NO PrimaryPart and unknown '
+                f'structure, so movement/targeting (entity.PrimaryPart...) breaks and the game freezes. '
+                f'Build the tagged moving entities from PRIMITIVES (a Model whose PrimaryPart you set to '
+                f'a Part named "HumanoidRootPart"); use model assets only for static scenery.'})
     return issues
 
 

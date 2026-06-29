@@ -59,12 +59,16 @@ responsible for the map/world, build it procedurally in start().
 ASSET USAGE — each resolved asset has a TYPE; use it the RIGHT way (the asset line tells you how):
 - audio: local s = Instance.new("Sound"); s.SoundId = "rbxassetid://<id>"; s.Parent = part; s:Play().
 - decal/image: surfaces -> Instance.new("Decal").Texture = "rbxassetid://<id>"; UI -> imageLabel.Image = it.
-- model: it's a full MODEL, NOT a mesh — load it and ALWAYS pcall + fall back to your own primitive:
+- model: a full MODEL asset — use it ONLY for STATIC SCENERY/DECORATION (trees, buildings, the
+  base/castle, rocks, props). Load with a pcall + a primitive fallback:
     local ok, c = pcall(function() return game:GetService("InsertService"):LoadAsset(<numericId>) end)
     if ok and c then local m = c:GetChildren()[1]; if m then m.Parent = parent; m:PivotTo(cf) end
-    else --[[ build a primitive version instead ]] end
-  Never set MeshId to a model id. Always keep a procedural fallback so the game looks right even if
-  an asset fails to load.
+    else --[[ build a primitive version ]] end
+  CRITICAL: NEVER use a model asset for anything that MOVES or needs reliable positioning — enemies,
+  towers, projectiles, pickups, the player-controlled object. LoadAsset models have NO PrimaryPart
+  and an unknown structure, so movement/targeting code (entity.PrimaryPart.Position) breaks and the
+  game freezes. Build EVERY gameplay entity from PRIMITIVES (a Model whose PrimaryPart you set to a
+  Part named "HumanoidRootPart"). Use audio/decals freely; use models for scenery only.
 
 GAME FEEL (make it FUN, not a tech demo) — give every important moment FEEDBACK:
 - a Sound on key actions (place, shoot, hit, collect, wave start, win, lose);
@@ -82,7 +86,8 @@ def _asset_use(t: str, aid: str) -> str:
     if t == "decal":
         return f'Decal.Texture (on a part) or ImageLabel.Image (in UI) = "{aid}"'
     if t == "model":
-        return f'InsertService:LoadAsset({num}) wrapped in pcall, fall back to your own primitive build'
+        return (f'STATIC SCENERY ONLY — InsertService:LoadAsset({num}) (pcall + primitive fallback). '
+                f'Do NOT use for moving/interactive entities; build those from primitives.')
     return f'"{aid}"'
 
 
