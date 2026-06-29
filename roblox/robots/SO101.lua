@@ -312,14 +312,23 @@ function SO101:_updateGrasp()
     if self.grasped then self.grasped.CFrame = self.tip.CFrame end
 end
 
+-- observation.state in the SO-101's NATIVE joint space (LeRobot convention): the 5 arm joint
+-- angles (deg) + the gripper (0..1). This matches what LeRobot records for this exact arm.
 function SO101:getObs()
     return {
-        joints = { self.angles[1], self.angles[2], self.angles[3], self.angles[4], self.angles[5] },
-        gripper = self.gripper,
-        ee = { self.ee.Position.X, self.ee.Position.Y, self.ee.Position.Z },
+        state = { self.angles[1], self.angles[2], self.angles[3], self.angles[4], self.angles[5], self.gripper },
+        ee = { self.ee.Position.X, self.ee.Position.Y, self.ee.Position.Z },  -- extra (not the policy state)
         holding = self.grasped ~= nil,
     }
 end
+
+-- action = the commanded JOINT TARGETS (joint-position control) — exactly what a LeRobot policy
+-- outputs to drive this arm, not an end-effector goal.
+function SO101:getAction()
+    return { self.targets[1], self.targets[2], self.targets[3], self.targets[4], self.targets[5], self.gripperTarget }
+end
+
+SO101.STATE_NAMES = { "shoulder_pan", "shoulder_lift", "elbow_flex", "wrist_flex", "wrist_roll", "gripper" }
 
 function SO101:getEEPose(): CFrame
     return self.ee

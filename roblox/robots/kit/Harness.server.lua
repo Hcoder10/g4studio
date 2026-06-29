@@ -86,7 +86,11 @@ local MASTER_AT = 2                   -- consecutive wins before Gemma forges a 
 local mastered, totalWins, winTimes = 0, 0, {}
 local extendGame                      -- forward decl (defined after ctx)
 local function newEpisode()
-	episode = Trace.new(Game.task or "so101_game", { robot = "SO101", game = Game.name or "game" })
+	episode = Trace.new(Game.task or "so101_game", {
+		robot = "SO101", game = Game.name or "game", fps = 60,
+		action_space = "joint_position",  -- LeRobot-native: state = joint angles, action = joint targets
+		state_names = SO101.STATE_NAMES, action_names = SO101.STATE_NAMES,
+	})
 	epStart = os.clock(); ended = false
 end
 
@@ -185,8 +189,5 @@ RunService.Heartbeat:Connect(function(dt)
 	local ok, r, s = pcall(Game.step, ctx, dt)
 	if ok then reward = tonumber(r) or 0; subgoal = (typeof(s) == "string" and s) or subgoal
 	else warn("[G4Game] step error: " .. tostring(r)) end
-	local tg = latest.target
-	episode:record(arm:getObs(),
-		{ target = tg and { tg.X, tg.Y, tg.Z } or nil, grip = latest.grip, wristRoll = latest.wristRoll },
-		reward, subgoal)
+	episode:record(arm:getObs(), arm:getAction(), reward, subgoal)  -- joint-space obs + action
 end)

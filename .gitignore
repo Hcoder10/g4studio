@@ -34,3 +34,6 @@ datasets/
 
 # intermediate STL downloads (the importable .obj files are kept)
 roblox/robots/meshes/stl/
+
+# generated LeRobot exports
+lerobot_datasets/
