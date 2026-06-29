@@ -11,22 +11,29 @@ local control = RS:WaitForChild("G4Control")
 local hudRemote = RS:WaitForChild("G4HUD")
 local camera = workspace.CurrentCamera
 
+local TweenService = game:GetService("TweenService")
+local CAM_CFRAME = CFrame.lookAt(Vector3.new(0, 13, 27), Vector3.new(0, 3, 4))  -- locked front-on view
+local function lockCamera()
+	camera.CameraType = Enum.CameraType.Scriptable
+	camera.CFrame = CAM_CFRAME
+	camera.FieldOfView = 55
+end
 local function lockChar(c)
-	local h = c:FindFirstChildOfClass("Humanoid") or c:WaitForChild("Humanoid")
-	h.WalkSpeed = 0; h.JumpPower = 0; pcall(function() h.JumpHeight = 0 end)
-	for _, p in ipairs(c:GetDescendants()) do
-		if p:IsA("BasePart") or p:IsA("Decal") then p.Transparency = 1 end
-	end
-	local hrp = c:FindFirstChild("HumanoidRootPart") or c:WaitForChild("HumanoidRootPart", 3)
-	if hrp then task.wait(0.1); hrp.CFrame = CFrame.new(0, 500, 0); hrp.Anchored = true end  -- stash far away
+	pcall(function()
+		local h = c:FindFirstChildOfClass("Humanoid") or c:WaitForChild("Humanoid", 5)
+		if h then h.WalkSpeed = 0; h.JumpPower = 0; pcall(function() h.JumpHeight = 0 end) end
+		local hrp = c:FindFirstChild("HumanoidRootPart") or c:WaitForChild("HumanoidRootPart", 5)
+		if hrp then hrp.Anchored = true; hrp.CFrame = CFrame.new(0, 200, 0) end  -- pin the avatar out of view
+		for _, p in ipairs(c:GetDescendants()) do
+			if p:IsA("BasePart") then p.Transparency = 1; p.CanCollide = false
+			elseif p:IsA("Decal") then p.Transparency = 1 end
+		end
+	end)
+	lockCamera()
 end
 if player.Character then task.spawn(lockChar, player.Character) end
-player.CharacterAdded:Connect(lockChar)
-task.wait(0.2)
-local TweenService = game:GetService("TweenService")
-camera.CameraType = Enum.CameraType.Scriptable
-camera.CFrame = CFrame.lookAt(Vector3.new(0, 13, 27), Vector3.new(0, 3, 4))  -- locked, front-on, frames the arena
-camera.FieldOfView = 55
+player.CharacterAdded:Connect(function(c) task.wait(0.15); lockChar(c) end)
+lockCamera()
 
 local grip, wristRoll, hover = false, 0, 1.2  -- hover = gripper height above the table point
 local TABLE_TOP = 0.5                          -- table surface y (matches the harness table)
@@ -83,6 +90,7 @@ end)
 
 local acc = 0
 RunService.RenderStepped:Connect(function(dt)
+	lockCamera()  -- re-assert every frame so a (re)spawn can't snap the camera back to the avatar
 	if UIS:IsKeyDown(Enum.KeyCode.R) then hover = math.min(hover + 5 * dt, 6) end
 	if UIS:IsKeyDown(Enum.KeyCode.F) then hover = math.max(hover - 5 * dt, 0.2) end
 	if UIS:IsKeyDown(Enum.KeyCode.Q) then wristRoll = math.clamp(wristRoll - 120 * dt, -180, 180) end
