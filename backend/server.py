@@ -3,8 +3,10 @@
 Run:  python backend/server.py   (then open http://127.0.0.1:8000)
 """
 import asyncio
+import json
 import os
 import sys
+import time
 import uuid
 
 from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
@@ -35,6 +37,45 @@ async def index():
 @app.get("/health")
 async def health():
     return {"ok": True}
+
+
+# ---- robot manipulation traces (the data the games collect) ----
+DATASET_DIR = os.path.join(REPO, "datasets")
+
+
+@app.post("/api/trace")
+async def api_trace(req: Request):
+    """Store one manipulation episode (obs/action/reward/sub-goal per step) as a dataset line.
+    One .jsonl per task; this is the training data the gamified sims naturally produce."""
+    ep = await req.json()
+    if not ep.get("steps"):
+        return {"ok": False, "error": "empty episode"}
+    os.makedirs(DATASET_DIR, exist_ok=True)
+    task = "".join(c for c in str(ep.get("task") or "task") if c.isalnum() or c in "_-")[:60] or "task"
+    ep["received_at"] = time.time()
+    path = os.path.join(DATASET_DIR, f"{task}.jsonl")
+    with open(path, "a", encoding="utf-8") as f:
+        f.write(json.dumps(ep) + "\n")
+    n = sum(1 for _ in open(path, encoding="utf-8"))
+    return {"ok": True, "task": task, "length": ep.get("length"),
+            "success": ep.get("success"), "episodes_for_task": n}
+
+
+@app.get("/api/datasets")
+async def api_datasets():
+    """Summary of collected episodes per task."""
+    out = {}
+    if os.path.isdir(DATASET_DIR):
+        for fn in os.listdir(DATASET_DIR):
+            if fn.endswith(".jsonl"):
+                p = os.path.join(DATASET_DIR, fn)
+                eps = [json.loads(ln) for ln in open(p, encoding="utf-8") if ln.strip()]
+                out[fn[:-6]] = {
+                    "episodes": len(eps),
+                    "successes": sum(1 for e in eps if e.get("success")),
+                    "total_steps": sum(int(e.get("length", 0)) for e in eps),
+                }
+    return out
 
 
 # ---- AI playtester that actually PLAYS the game in a real Play session ----

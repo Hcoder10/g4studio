@@ -28,3 +28,6 @@ backend/assets/thumbs/
 
 # vendored Luau compiler (self-bootstraps via syntax.py)
 backend/bin/
+
+# collected robot-manipulation trace datasets (data, can grow large)
+datasets/
