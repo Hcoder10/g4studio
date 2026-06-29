@@ -55,7 +55,7 @@ SO101.MESH_OFFSET = {
 	upper = CFrame.new(-1.9498, -0.4323, 0.6649),
 	fore = CFrame.new(-2.1960, 0.1139, 0.6665),
 	wrist = CFrame.new(-0.0716, -0.8882, 0.7309),
-	gripperhub = CFrame.new(-0.0792, -0.0660, -1.7067),
+	gripperhub = CFrame.new(-0.0792, -0.0660, -1.7067) * CFrame.Angles(0, 0, math.pi),  -- mesh imported 180 deg rolled
 	jaw = CFrame.new(-0.0380, -1.1881, 0.6237),
 }
 
