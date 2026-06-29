@@ -475,6 +475,37 @@ end
 
 -- ============================ Run ==========================================
 local busy = false
+-- Reset the place to a clean baseplate before each build (clears the old game + G4 artifacts).
+local function resetToBaseplate()
+	for _, child in ipairs(workspace:GetChildren()) do
+		if child ~= workspace.Terrain and not child:IsA("Camera") then
+			pcall(function() child:Destroy() end)
+		end
+	end
+	local base = Instance.new("Part")
+	base.Name = "Baseplate"; base.Anchored = true
+	base.Size = Vector3.new(512, 16, 512); base.Position = Vector3.new(0, -8, 0)
+	base.Color = Color3.fromRGB(70, 100, 60); base.Material = Enum.Material.Grass
+	base.TopSurface = Enum.SurfaceType.Smooth; base.Parent = workspace
+	local sp = Instance.new("SpawnLocation")
+	sp.Size = Vector3.new(12, 1, 12); sp.Position = Vector3.new(0, 0.5, 0)
+	sp.Anchored = true; sp.Parent = workspace
+	local RS = game:GetService("ReplicatedStorage")
+	for _, n in ipairs({ "G4Shared", "G4Systems", "G4Remotes" }) do
+		local f = RS:FindFirstChild(n); if f then f:Destroy() end
+	end
+	local SSS = game:GetService("ServerScriptService")
+	for _, n in ipairs({ "G4ServerBootstrap", "G4Server", "G4GameScript", "G4ErrorProbe" }) do
+		local f = SSS:FindFirstChild(n); if f then f:Destroy() end
+	end
+	local SPS = game:GetService("StarterPlayer"):FindFirstChild("StarterPlayerScripts")
+	if SPS then
+		for _, n in ipairs({ "G4Client", "G4ClientBootstrap" }) do
+			local f = SPS:FindFirstChild(n); if f then f:Destroy() end
+		end
+	end
+end
+
 local function build()
 	if busy then return end
 	local prompt = promptBox.Text
@@ -482,7 +513,8 @@ local function build()
 	busy = true
 	buildBtn.Text = "Building…"; buildBtn.BackgroundColor3 = Color3.fromRGB(74, 163, 255)
 	clearAgents()
-	status.Text = "Starting swarm on Cerebras…"
+	resetToBaseplate()
+	status.Text = "Reset to baseplate · starting swarm on Cerebras…"
 
 	task.spawn(function()
 		local function done()
@@ -543,6 +575,8 @@ local StudioTestService = game:GetService("StudioTestService")
 local RunService = game:GetService("RunService")
 local ScriptContext = game:GetService("ScriptContext")
 local LogService = game:GetService("LogService")
+local HttpService = game:GetService("HttpService")
+local SERVER = "{{SERVER_URL}}"
 if not RunService:IsRunning() then return end
 if StudioTestService:GetTestArgs() ~= "G4PROBE" then return end
 local errors, seen = {}, {}
@@ -558,16 +592,27 @@ end)
 LogService.MessageOut:Connect(function(msg, t)
 	if t == Enum.MessageType.MessageError then add(msg, "", "") end
 end)
+local mapResult = nil
+task.spawn(function()
+	task.wait(6)  -- let the map build, then grade it with vision
+	local ok, res = pcall(function()
+		return HttpService:RequestAsync({ Url = SERVER .. "/api/map_vision", Method = "POST",
+			Headers = { ["Content-Type"] = "application/json" }, Body = "{}" })
+	end)
+	if ok and res.Success then mapResult = HttpService:JSONDecode(res.Body) end
+end)
 task.spawn(function()
 	task.wait(15)
-	StudioTestService:EndTest({ errors = errors })
+	StudioTestService:EndTest({ errors = errors, map = mapResult })
 end)
 ]==]
 
 local function placeProbe()
 	local SSS = game:GetService("ServerScriptService")
 	local old = SSS:FindFirstChild("G4ErrorProbe"); if old then old:Destroy() end
-	local s = Instance.new("Script"); s.Name = "G4ErrorProbe"; s.Source = PROBE_SRC; s.Parent = SSS
+	local s = Instance.new("Script"); s.Name = "G4ErrorProbe"
+	s.Source = PROBE_SRC:gsub("{{SERVER_URL}}", function() return serverUrl() end)
+	s.Parent = SSS
 end
 
 local function removeProbe()
@@ -595,23 +640,38 @@ local function agentPlaytest()
 			status.Text = "StudioTestService unavailable (update Studio)."; busy = false; return
 		end
 		for attempt = 1, 3 do
-			status.Text = string.format("🔬 Run & Fix: launching Play Solo (try %d)…", attempt)
+			status.Text = string.format("🔬 Run & Fix: Play Solo (try %d)…", attempt)
 			placeProbe()
 			local rok, result = pcall(function() return sts:ExecutePlayModeAsync("G4PROBE") end)
 			removeProbe()
 			if not rok then status.Text = "Playtest error: " .. tostring(result); break end
-			local errs = (type(result) == "table" and result.errors) or {}
-			if #errs == 0 then status.Text = "✅ Ran clean — no runtime errors!"; break end
-			status.Text = string.format("Found %d runtime error(s) — repairing…", #errs)
-			local hok, res = pcall(function()
-				return HttpService:RequestAsync({ Url = serverUrl() .. "/api/runtime_repair", Method = "POST",
-					Headers = { ["Content-Type"] = "application/json" }, Body = HttpService:JSONEncode({ errors = errs }) })
-			end)
-			if not hok or not res.Success then status.Text = "Repair request failed."; break end
-			local fixed = (HttpService:JSONDecode(res.Body) or {}).fixed or {}
-			if #fixed == 0 then status.Text = string.format("%d runtime error(s); no fix produced.", #errs); break end
-			applyFixedModules(fixed)
-			status.Text = string.format("🔧 Repaired %d module(s) — re-testing…", #fixed)
+			result = (type(result) == "table") and result or {}
+			local errs = result.errors or {}
+			local map = result.map
+			local changed = false
+			-- vision map QA: apply an improved map if the playtester graded it low
+			if map and map.fixed and #map.fixed > 0 then
+				applyFixedModules(map.fixed); changed = true
+				status.Text = string.format("🗺 Map %s/10 — improving the world…", tostring(map.score))
+			end
+			-- runtime errors: repair the offending modules
+			if #errs > 0 then
+				status.Text = string.format("Found %d runtime error(s) — repairing…", #errs)
+				local hok, res = pcall(function()
+					return HttpService:RequestAsync({ Url = serverUrl() .. "/api/runtime_repair", Method = "POST",
+						Headers = { ["Content-Type"] = "application/json" }, Body = HttpService:JSONEncode({ errors = errs }) })
+				end)
+				if hok and res.Success then
+					local fixed = (HttpService:JSONDecode(res.Body) or {}).fixed or {}
+					if #fixed > 0 then applyFixedModules(fixed); changed = true end
+				end
+			end
+			if not changed then
+				local ms = (map and map.score) and (" · map " .. tostring(map.score) .. "/10") or ""
+				status.Text = "✅ Ran clean — no runtime errors" .. ms .. "."
+				break
+			end
+			status.Text = "🔧 Repaired — re-testing…"
 		end
 		busy = false
 	end)

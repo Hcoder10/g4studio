@@ -39,6 +39,10 @@ CONTRACT = r"""ARCHITECTURE CONTRACT (follow EXACTLY so the pieces integrate):
     (inst:SetAttribute("Health", n), inst:SetAttribute("PathProgress", p)); find them with
     CollectionService:GetTagged("Enemy"); give the entity a PrimaryPart for position.
   Use RemoteEvents (from the list) only for explicit client<->server requests/signals.
+- SPATIAL DATA is SHARED, never duplicated: the enemy path waypoints, spawn points, buildable
+  zones, and the base/goal position live in a shared module — if you need them, READ them from
+  there. Do NOT build the map or invent your own path/coordinates unless you ARE the designated
+  map/world owner. Two systems using different coordinates is why towers and enemies miss.
 - Only REAL Roblox API/Enums; never index a possibly-nil value; never loop without task.wait."""
 
 SHARED_SYSTEM = r"""You are building ONE shared ModuleScript for a Roblox game — it holds data

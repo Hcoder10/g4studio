@@ -30,6 +30,57 @@ def _remotes_used(src: str) -> set[str]:
     return used
 
 
+def _exports_of(src: str) -> set | None:
+    """The top-level members a shared ModuleScript exports, or None if undeterminable."""
+    rets = re.findall(r'^\s*return\s+(\w+)\b', src, re.M)
+    tbl = rets[-1] if rets else None
+    if not tbl:
+        return None
+    ex = set(re.findall(rf'\b{re.escape(tbl)}\.(\w+)\s*=', src))
+    ex |= set(re.findall(rf'function\s+{re.escape(tbl)}[.:](\w+)', src))
+    return ex
+
+
+def _shared_aliases(src: str, shared_names: set) -> dict:
+    out = {}
+    for m in re.finditer(r'local\s+(\w+)\s*=\s*require\(([^\n]*)\)', src):
+        alias, expr = m.group(1), m.group(2)
+        if "G4Shared" not in expr:
+            continue
+        for nm in shared_names:
+            if re.search(rf'["\.]{re.escape(nm)}\b', expr):
+                out[alias] = nm
+                break
+    return out
+
+
+def _shared_api_issues(modules: list[dict]) -> list[dict]:
+    """Flag a system calling Config.Func when the shared Config module doesn't export Func —
+    this silently crashes start() and the system never runs."""
+    shared = {m["name"]: m for m in modules if m["kind"] == "shared"}
+    exports = {}
+    for nm, m in shared.items():
+        ex = _exports_of(m["source"])
+        if ex is not None:
+            exports[nm] = ex
+    issues = []
+    for m in modules:
+        if m["kind"] == "shared":
+            continue
+        for alias, modname in _shared_aliases(m["source"], set(shared)).items():
+            if modname not in exports:
+                continue
+            for member in set(re.findall(rf'\b{re.escape(alias)}\.(\w+)\b', m["source"])):
+                if member not in exports[modname]:
+                    issues.append({
+                        "modules": [m["name"], modname],
+                        "detail": f'{m["name"]} uses {alias}.{member} but '
+                                  f'ReplicatedStorage.G4Shared.{modname} does NOT export "{member}". '
+                                  f'{modname} exports: {sorted(exports[modname])}. Either add {member} '
+                                  f'to {modname} or call the correct existing name.'})
+    return issues
+
+
 def verify(spec: dict, modules: list[dict]) -> tuple[list[dict], set[str]]:
     writes: dict[str, set] = {}
     reads: dict[str, set] = {}
@@ -73,4 +124,5 @@ def verify(spec: dict, modules: list[dict]) -> tuple[list[dict], set[str]]:
                     "modules": [nm],
                     "detail": f'{nm} requires ReplicatedStorage.G4Shared.{r}, which does NOT exist. '
                               f'Existing shared modules: {sorted(shared_names)}.'})
+    issues += _shared_api_issues(modules)  # calls to non-existent shared-module functions
     return issues, remotes_used

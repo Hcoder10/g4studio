@@ -28,12 +28,15 @@ for _, n in ipairs({{{_lua_list(server_systems)}}}) do
 \t\tlocal ok, mod = pcall(require, m)
 \t\tif ok and type(mod) == "table" and mod.start then
 \t\t\tlocal sok, serr = pcall(mod.start)
-\t\t\tif not sok then warn("[G4] "..n..".start: "..tostring(serr)) end
+\t\t\tif not sok then
+\t\t\t\twarn("[G4] "..n..".start: "..tostring(serr))
+\t\t\t\ttask.defer(function() error("G4StartError in "..n..": "..tostring(serr), 0) end)
+\t\t\tend
 \t\telse
-\t\t\twarn("[G4] "..n.." has no start()")
+\t\t\ttask.defer(function() error("G4StartError in "..n..": no start()", 0) end)
 \t\tend
 \telse
-\t\twarn("[G4] server system not found: "..n)
+\t\ttask.defer(function() error("G4StartError: server system not found: "..n, 0) end)
 \tend
 end
 print("[G4] server bootstrap complete")

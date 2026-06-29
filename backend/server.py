@@ -105,6 +105,55 @@ async def api_playbot(req: Request):
         await client.aclose()
 
 
+MAP_REVISE_SYSTEM = (
+    "You are improving the WORLD/MAP-building code of one Roblox module. A playtester saw the map "
+    "running in-game and gave feedback. Make the map richer and clearer per the feedback — denser "
+    "decoration, a clearly bounded arena, a readable enemy path, good lighting/atmosphere — WITHOUT "
+    "changing gameplay logic or any shared coordinates/waypoints/spawn points. Only REAL Roblox API. "
+    "Output ONLY the corrected Luau module.")
+
+
+@app.post("/api/map_vision")
+async def api_map_vision(req: Request):
+    """Vision map QA for a running segmented game: screenshot Studio, grade the MAP, and if weak
+    revise the map-owning module (the one that builds the most world geometry)."""
+    data_uri = capture_data_uri()
+    if not data_uri or not LAST_BUILD.get("modules"):
+        return {"score": 7, "issues": [], "fixed": []}
+    client = CerebrasClient()
+    try:
+        crit, _ = await client.vision_json(
+            PLAYTEST_OPEN,
+            "This is a screenshot of an auto-generated game's MAP/arena running in Studio. Grade the "
+            "MAP quality (layout, decoration density, clarity of the playable area + path, atmosphere). "
+            "Output only JSON.", data_uri, max_tokens=1000)
+        try:
+            score = int(crit.get("score", 7))
+        except (TypeError, ValueError):
+            score = 7
+        issues = [str(x) for x in (crit.get("issues") or [])][:4]
+        if score >= 6:
+            return {"score": score, "issues": issues, "fixed": []}
+        modules = LAST_BUILD["modules"]
+        owner = max(modules, key=lambda m: m["source"].count('Instance.new("Part"'))
+        if owner["source"].count('Instance.new("Part"') < 3:
+            return {"score": score, "issues": issues, "fixed": []}
+        rv = await client.chat(
+            [{"role": "system", "content": MAP_REVISE_SYSTEM},
+             {"role": "user", "content":
+              f"Playtester saw the map and scored it {score}/10. Issues: {'; '.join(issues)}. "
+              f"Improve the MAP-building in this module (keep gameplay + shared coordinates):\n{owner['source']}"}],
+            max_tokens=12000, temperature=0.5)
+        fixed_src = _force_fix(_strip_fences(rv.text or ""))
+        if len(fixed_src) > 200:
+            owner["source"] = fixed_src
+            return {"score": score, "issues": issues,
+                    "fixed": [{"name": owner["name"], "kind": owner["kind"], "source": fixed_src}]}
+        return {"score": score, "issues": issues, "fixed": []}
+    finally:
+        await client.aclose()
+
+
 @app.post("/api/vision")
 async def api_vision(req: Request):
     """Screenshot the REAL Roblox Studio window, have Gemma-4 grade the engine render,

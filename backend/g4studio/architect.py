@@ -16,11 +16,19 @@ SPECIFIC game needs — only what it needs. A simple game has 2-3 systems; a com
 tower defense) needs many: lobby, matchmaking, map/build, towers, enemies, waves, economy,
 UI/HUD, VFX/audio.
 
+CRITICAL — SINGLE OWNERSHIP (this is the #1 cause of broken games): every responsibility has
+EXACTLY ONE owner. NEVER let two systems build the world/map/path, spawn enemies, or own the
+economy. The map/arena and the enemy PATH are built by exactly ONE system. Any spatial data that
+MULTIPLE systems need (the path waypoints, spawn points, buildable zones, the base/goal position)
+goes in a SHARED module (a data table) that the world-builder, the enemies, AND the towers all read
+— so everyone agrees on the same coordinates. Prefer FEWER, COHESIVE systems (aim for 3-5 even for a
+complex game) over many fragmented ones; cohesion makes the gameplay actually work.
+
 For each system give:
 - name
 - run: where it runs — "server" (a Script in ServerScriptService), "client" (a LocalScript in
   StarterPlayerScripts), or "module" (a shared ModuleScript in ReplicatedStorage)
-- responsibility: one or two sentences, concrete
+- responsibility: one or two sentences, concrete, with a CLEAR single owner (no overlap)
 - assets: short SEARCH PHRASES for assets it needs (e.g. "medieval stone tower",
   "zombie enemy model", "epic battle music", "explosion particle"); [] if none.
 
