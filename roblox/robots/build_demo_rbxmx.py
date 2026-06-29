@@ -62,9 +62,9 @@ local function spawnCube()
 end
 local cube = spawnCube()
 
-local latest = { target = nil, grip = false }
-control.OnServerEvent:Connect(function(_, t, grip)
-	latest.target = t; latest.grip = grip and true or false
+local latest = { target = nil, grip = false, wristRoll = 0 }
+control.OnServerEvent:Connect(function(_, t, grip, wristRoll)
+	latest.target = t; latest.grip = grip and true or false; latest.wristRoll = wristRoll or 0
 end)
 
 local function newEpisode()
@@ -74,6 +74,7 @@ local ep = newEpisode()
 
 RunService.Heartbeat:Connect(function(dt)
 	if latest.target then arm:solveTo(latest.target) end
+	arm:setTarget(5, latest.wristRoll or 0)  -- wrist roll (Q/E) — the joint between wrist and gripper
 	arm:grip(latest.grip and 0 or 1)
 	arm:step(dt)
 	local obs = arm:getObs()
@@ -82,7 +83,7 @@ RunService.Heartbeat:Connect(function(dt)
 	local subgoal = obs.holding and (cubeToBin < 2.2 and "place" or "transport")
 		or (toCube < 1.6 and "grasp" or "reach")
 	local action = { target = latest.target and { latest.target.X, latest.target.Y, latest.target.Z } or nil,
-		grip = latest.grip }
+		grip = latest.grip, wristRoll = latest.wristRoll }
 	ep:record(obs, action, -0.01 * toCube - (obs.holding and 0.02 * cubeToBin or 0), subgoal)
 	if cubeToBin < 1.7 and cube.Position.Y < 2 and not obs.holding then
 		ep:finish(true, 1, SERVER); cube:Destroy(); cube = spawnCube(); ep = newEpisode()
@@ -103,13 +104,14 @@ local player = Players.LocalPlayer
 local control = RS:WaitForChild("G4Control")
 local mouse = player:GetMouse()
 local grip = false
+local wristRoll = 0
 
 local gui = Instance.new("ScreenGui"); gui.ResetOnSpawn = false; gui.Parent = player:WaitForChild("PlayerGui")
 local lbl = Instance.new("TextLabel")
-lbl.Size = UDim2.new(0, 380, 0, 40); lbl.Position = UDim2.new(0, 20, 0, 20)
+lbl.Size = UDim2.new(0, 430, 0, 40); lbl.Position = UDim2.new(0, 20, 0, 20)
 lbl.BackgroundTransparency = 0.4; lbl.BackgroundColor3 = Color3.new(0, 0, 0)
 lbl.TextColor3 = Color3.new(1, 1, 1); lbl.Font = Enum.Font.GothamBold; lbl.TextScaled = true
-lbl.Text = "SO-101 · move mouse to aim · click to grab/release"; lbl.Parent = gui
+lbl.Text = "SO-101 · mouse aims · click grab/release · Q/E roll wrist"; lbl.Parent = gui
 
 UIS.InputBegan:Connect(function(i, gp)
 	if gp then return end
@@ -121,8 +123,10 @@ end)
 
 local acc = 0
 RunService.RenderStepped:Connect(function(dt)
+	if UIS:IsKeyDown(Enum.KeyCode.Q) then wristRoll = math.clamp(wristRoll - 120 * dt, -180, 180) end
+	if UIS:IsKeyDown(Enum.KeyCode.E) then wristRoll = math.clamp(wristRoll + 120 * dt, -180, 180) end
 	acc += dt; if acc < 0.03 then return end; acc = 0
-	if mouse.Hit then control:FireServer(mouse.Hit.Position, grip) end
+	if mouse.Hit then control:FireServer(mouse.Hit.Position, grip, wristRoll) end
 end)
 '''
 

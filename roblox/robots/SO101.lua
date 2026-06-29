@@ -70,10 +70,10 @@ function SO101.new(parent: Instance, baseCFrame: CFrame)
 	self.p_upper = part("UpperArm", Vector3.new(1.0, L.upper, 1.0), grey, model)
 	self.p_fore = part("Forearm", Vector3.new(0.9, L.fore, 0.9), grey, model)
 	self.p_wrist = part("Wrist", Vector3.new(0.8, L.wrist, 0.8), accent, model)
-	self.p_hand = part("Hand", Vector3.new(1.2, 0.6, L.hand), grey, model)
-	self.fingerL = part("FingerL", Vector3.new(0.25, 0.25, 1.4), accent, model)
-	self.fingerR = part("FingerR", Vector3.new(0.25, 0.25, 1.4), accent, model)
-	self.tip = part("Tip", Vector3.new(0.4, 0.4, 0.4), Color3.fromRGB(255, 80, 80), model)
+	self.p_hand = part("Hand", Vector3.new(1.3, 1.0, L.hand), grey, model)         -- wrist/palm
+	self.fixedJaw = part("FixedJaw", Vector3.new(0.9, 0.3, 1.7), grey, model)      -- static lower jaw
+	self.movingJaw = part("MovingJaw", Vector3.new(0.9, 0.3, 1.7), accent, model)  -- pivoting upper jaw
+	self.tip = part("Tip", Vector3.new(0.3, 0.3, 0.3), Color3.fromRGB(255, 80, 80), model)
 	self.tip.Transparency = 1
 
 	self:_fk()
@@ -100,13 +100,16 @@ function SO101:_fk()
 	self.p_wrist.CFrame = c * CFrame.new(0, L.wrist / 2, 0)
 	-- wrist roll (about the arm axis)
 	c = c * CFrame.new(0, L.wrist, 0) * CFrame.Angles(0, r(a[5]), 0)
-	-- hand points outward (+Y of the chain becomes the approach axis)
+	-- hand points outward (the chain's +Y becomes the approach axis -Z of the palm)
 	local hand = c * CFrame.new(0, L.hand / 2, 0) * CFrame.Angles(-math.pi / 2, 0, 0)
 	self.p_hand.CFrame = hand
-	local spread = (SO101.GRIPPER_OPEN_DEG * self.gripper) / 60  -- studs each side
-	self.fingerL.CFrame = hand * CFrame.new(-0.35 - spread, 0, -L.hand / 2)
-	self.fingerR.CFrame = hand * CFrame.new(0.35 + spread, 0, -L.hand / 2)
-	self.tip.CFrame = hand * CFrame.new(0, 0, -L.hand)
+	-- gripper: a FIXED lower jaw + a MOVING upper jaw that PIVOTS open about the palm hinge
+	-- (like the real SO-101 Moving_Jaw), instead of two sliding fingers.
+	local openRad = math.rad(SO101.GRIPPER_OPEN_DEG * self.gripper)
+	local hinge = hand * CFrame.new(0, 0, -L.hand * 0.5)
+	self.fixedJaw.CFrame = hinge * CFrame.new(0, -0.45, -0.85)
+	self.movingJaw.CFrame = hinge * CFrame.Angles(openRad, 0, 0) * CFrame.new(0, 0.45, -0.85)
+	self.tip.CFrame = hinge * CFrame.new(0, -0.1, -1.6)
 	self.ee = self.tip.CFrame
 end
 
