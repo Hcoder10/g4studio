@@ -548,7 +548,10 @@ p { margin:0 0 1rem; }
   border-radius:inherit; white-space:nowrap;
 }
 .soon.mini::after { content:"Soon"; font-size:.54rem; }
-.on-dark .soon::after, .soon.on-dark2::after { color:var(--cream-50); background:rgba(39,10,12,.55); }
+.on-dark .soon::after, .soon.on-dark2::after {
+  color:var(--cream-50); background:rgba(39,10,12,.74);
+  -webkit-backdrop-filter:blur(3.4px) saturate(.9); backdrop-filter:blur(3.4px) saturate(.9);
+}
 .footer-col.soon-col { position:relative; }
 .footer-col.soon-col .lst { opacity:.5; filter:blur(2px); pointer-events:none; }
 .footer-col.soon-col .soon-tag { position:absolute; top:30px; left:0; font:700 .6rem/1 var(--font-sans); letter-spacing:.08em; text-transform:uppercase; color:var(--gold-300); background:rgba(39,10,12,.6); padding:4px 8px; border-radius:6px; }

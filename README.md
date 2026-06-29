@@ -1,50 +1,96 @@
-# G4 Studio — an AI game studio at the speed of thought
+# G4 Studio — Roblox as a robot-data factory
 
-A swarm of **Gemma-4-31b** agents running on **Cerebras** turns one prompt into a
-complete, **playable Roblox obby in seconds**. A vision agent *sees* the level and
-fixes it. Built for the Cerebras × Google DeepMind Gemma 4 hackathon.
+**Point Gemma-4 at a robot arm. It invents fun games where *playing is labeling robot training
+data*** — and keeps inventing harder ones as players get good. The arm is a faithful, URDF-exact
+**SO-101**; every session records LeRobot-format joint-space demonstrations.
 
-## Why it's fast (and real)
-- **Cerebras Gemma-4** runs each agent call in ~100 ms, so a whole multi-agent
-  studio (Director → Builders → Scripter → Vision Playtester) resolves in seconds.
-- The swarm emits **structured build-ops**, which become a real, **insertable
-  Roblox model** (`.rbxmx`) with working scripts embedded — Insert From File, press
-  Play. No live-Studio bridge required.
-- **Templated mechanics + LLM-designed layout:** Gemma does the creative/spatial
-  design; proven Luau templates guarantee checkpoints, kill-bricks, win detection,
-  and moving platforms work every time.
+Built on **Gemma-4-31b** running on **Cerebras** (each design/repair call ~100 ms, so a whole game
+is invented, coded, syntax-repaired and packaged in seconds).
 
-## Architecture
+---
+
+## The idea
+
+Manipulation data is the bottleneck in robot learning, and it's expensive to collect. G4 Studio
+turns it into *gameplay*: Gemma designs a game whose win condition can only be met by controlling
+the arm well, so a kid playing a claw-machine game is generating clean, **skill-labeled** SO-101
+demonstrations. The arm + IK + controls + trace recording are a fixed **kit**; Gemma only writes the
+*fun* (scene, rules, scoring, juice, per-step skill labels), so generated games can't break the
+robot or the data pipeline.
+
 ```
-prompt
-  │
-  ▼
-Director (Gemma-4)  ── game spec (theme, difficulty, stage plan)
-  │
-  ├─► Builder agents (parallel)  ── structured build-ops (platforms, hazards, …)
-  ├─► Scripter                   ── mechanics params
-  ▼
-GameSpec ──► emit/rbxmx.py  ──► g4obby.rbxmx  (Insert into Studio → playable)
-         └─► emit/luau.py   ──► g4obby_build.luau (command-bar fallback)
-         └─► three.js preview (browser) ── live block-by-block build = the speed shot
-  │
-  ▼
-Vision Playtester (Gemma-4 vision) ── screenshots the preview, critiques, fixes
+ Gemma-4 (Cerebras)                    fixed KIT (can't be broken by generation)
+ ─────────────────                     ──────────────────────────────────────────
+ Director  → game concept              SO-101 arm  (URDF-exact FK + DLS IK)
+ Coder     → Game module  ─────────►   Harness     (drives the game, records every
+ (syntax-repaired, compiles)            frame as a joint-space trace)
+                                        Hover controller + game HUD
+        ▲                                        │
+        │ when MASTERED, forge a harder one      ▼
+        └──────── self-extending curriculum   datasets/<task>.jsonl
+                                                 │  export
+                                                 ▼
+                                        LeRobot v2.1 dataset (state/action parquet)
+```
+
+## What's real (verified)
+
+| Piece | Status |
+|---|---|
+| **SO-101 arm** | Reconstructed from the official URDF — exact joint origins/axes/limits, real meshes baked per-link. DLS IK + null-space posture. |
+| **Game generation** | Gemma designs + codes games that compile; verified across many (color-sort, stacking, insertion, claw-machine…). |
+| **Self-extending curriculum** | Master a game (2-win streak) → Gemma forges a harder one in the same skill, hot-swapped at runtime via `loadstring`. |
+| **Structured task families** | 5 families (pick_place / sorting / stacking / insertion / kitting) with variation axes + a dedup registry. 3 stacking games came out distinct (taper / inverted-weight / thin-slab). |
+| **LeRobot-native data** | `observation.state` = joint angles, `action` = commanded joint targets; exports to LeRobot v2.1 (parquet + meta). |
+| **Learnability** | A behavior-cloning smoke test on 150 synth episodes (28k frames): test MSE **48× below** predict-mean baseline, per-joint **R² 0.94–1.0**. |
+| **Onboard any robot** | `onboard_robot.py <urdf>` auto-derives the chain + **auto-searches a rest pose** by reach. SO-101 → 93%, SO-100 → 100%, ~15s each. |
+
+## Honest limits
+
+- **Sim-to-real:** it's Roblox *kinematic* physics, not real dynamics. The data is validated as
+  *learnable* and *correctly formatted* — not as zero-shot transferable. Treat it as sim
+  pretraining / curriculum data.
+- **IK coverage:** the 5-DOF arm can't reach every pose; games place objects in the reliable
+  forward workcell (where the IK solves to ~0 error).
+- **Mesh upload** during onboarding is manual (Roblox's importer; no external tool can automate it).
+- The runtime `loadstring` hot-swap needs *LoadStringEnabled* and is the one path not yet driven
+  end-to-end in Studio by us.
+
+---
+
+## Quick start
+
+```bash
+pip install -r requirements.txt
+echo "CEREBRAS_API_KEY=..." > .env          # gitignored, never commit
+python backend/server.py                     # http://127.0.0.1:8000
+
+# 1) Gemma invents a robot game (or pass a structured family):
+python roblox/robots/make_game.py "claw machine prizes"
+curl -X POST :8000/api/robotgame -d '{"family":"stacking"}'   # -> out/G4RobotGame.rbxmx
+# Insert out/G4RobotGame.rbxmx into Workspace, enable HTTP Requests, Play.
+
+# 2) Data pipeline (works without Studio, using synthesized demos):
+python backend/tools/synth_traces.py 150     # scripted policy -> datasets/*.jsonl
+python backend/tools/lerobot_export.py        # -> lerobot_datasets/<task>/ (LeRobot v2.1)
+python backend/tools/bc_smoke.py              # prove the data is learnable
+
+# 3) Onboard a new arm:
+python backend/tools/onboard_robot.py path/to/robot.urdf myarm
 ```
 
 ## Layout
-- `backend/g4studio/ops.py` — GameSpec + build-op schema
-- `backend/g4studio/mechanics.py` — templated Luau mechanics (model-agnostic)
-- `backend/g4studio/emit/` — `.rbxmx` (primary) + Luau emitters
-- `backend/g4studio/cerebras.py` — async Gemma-4 client (chat / tools / vision / timing)
-- `backend/sample_obby.py` — offline demo: hand-authored spec → artifacts (no API key)
-- `frontend/` — live swarm UI + three.js preview + speed side-by-side
 
-## Quick start (offline, no key)
-```
-python backend/sample_obby.py
-# → out/g4obby.rbxmx  and  out/g4obby_build.luau
-# In Studio: right-click Workspace → Insert From File → out/g4obby.rbxmx → Play
-```
+- `roblox/robots/` — the robot kit: `SO101.lua` (URDF-exact arm + IK), `Trace.lua` (recorder),
+  `kit/Harness.server.lua` (drives a Gemma game, records traces, runs the curriculum),
+  `kit/Control.client.lua` (hover controller), `build_game_rbxmx.py` (packager), `meshes/`.
+- `backend/g4studio/robotgame.py` — Director/Coder game generation + extend + family generation.
+- `backend/g4studio/families.py` — structured task families + dedup registry.
+- `backend/tools/` — `so101_kin.py` (Python kinematics), `synth_traces.py`, `lerobot_export.py`,
+  `bc_smoke.py`, `onboard_robot.py`.
+- `backend/server.py` — API: `/api/robotgame`, `/api/robotgame/extend`, `/api/families`,
+  `/api/trace`, `/api/datasets`.
+- `backend/g4studio/` (rest) — the original Gemma "build a playable Roblox game from a prompt"
+  studio this grew out of (authored + swarm pipelines).
 
-Put your key in a gitignored `.env` (`CEREBRAS_API_KEY=...`). Never commit it.
+Key in a gitignored `.env` (`CEREBRAS_API_KEY=…`). Never commit it.
