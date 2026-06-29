@@ -21,56 +21,59 @@ from .cerebras import CerebrasClient
 from .genre_common import emit_ev
 from .validate import MATERIALS, PART_TYPES, find_api_issues
 
-CODER_SYSTEM = r"""You are a master Roblox engineer with FULL creative control. Author a complete
-game as THREE clearly separated parts so it runs correctly in Roblox. Output EXACTLY this format,
-using the marker lines verbatim:
+CODER_SYSTEM = r"""You are a master Roblox Luau engineer with FULL creative control. Author a complete
+game. You decide everything — there are no templates. Output it as THREE parts (so each runs in the
+right place), using these marker lines verbatim:
 
--- TITLE: <short catchy game name>
+-- TITLE: <a short catchy game name>
 -- ===== BUILD =====
-<Luau that builds the STATIC WORLD ONLY (runs ONCE in Studio edit mode). Build it procedurally,
- with helper functions + loops/math so it's coherent and lively:
- - FIRST, clear any previous build so re-running is clean:
-     local old = workspace:FindFirstChild("G4Game"); if old then old:Destroy() end
- - Make helpers for repeated props from PRIMITIVES, e.g. makeTree(x,z), makeRock(x,z), using Parts
-   with .Shape (Enum.PartType.Ball/Cylinder/Block) or WedgePart, .Material, .Color=Color3.fromRGB,
-   .Anchored=true, and PointLight for glows. Group props in a Model.
- - Lay out the world with LOOPS/MATH for real structure: a bounded floor + perimeter walls; rows,
-   rings (math.sin/cos), grids, or clusters; a clear SpawnLocation; the objective placed purposefully.
-   Vary scale/rotation a little so nothing is copy-pasted.
- - Parent everything under a Folder "G4Game" in Workspace, grouped in subfolders.
- - Set lighting/atmosphere to fit the theme (game.Lighting: ClockTime, Ambient, FogColor/FogEnd, an Atmosphere).
- DO NOT put gameplay, event handlers, leaderstats, or player logic here — those go in SERVER/CLIENT below.>
 -- ===== SERVER =====
-<Luau for a SERVER Script that runs at game RUNTIME (in ServerScriptService). ALL server gameplay:
- leaderstats, scoring, win/lose, part.Touched handlers, NPC/enemy logic, server loops via
- task.spawn(function() while true do ... task.wait(t) end end). It references the already-built
- world via workspace:WaitForChild("G4Game"). Handle Players.PlayerAdded AND Players:GetPlayers().
- To talk to clients, create RemoteEvents in ReplicatedStorage.>
 -- ===== CLIENT =====
-<Luau for a LocalScript that runs at game RUNTIME on each client (in StarterPlayerScripts). UI/HUD,
- score display, local effects, camera, input. Use local player = game.Players.LocalPlayer and
- player:WaitForChild("PlayerGui"). Read leaderstats / listen to the server's RemoteEvents.>
 
-Rules: only REAL Roblox API and Enums; never index a possibly-nil value (FindFirstChild /
-WaitForChild, use HumanoidRootPart not PrimaryPart); never loop without a task.wait. Make a real,
-lively, atmospheric game with a clear objective. Output ONLY the three sections."""
+BUILD (runs ONCE in Studio edit mode to construct the static world — no gameplay here). Build it
+procedurally, with helper functions + loops/math so it's coherent and lively:
+- FIRST, clear any previous build so re-running is clean:
+  `local old = workspace:FindFirstChild("G4Game"); if old then old:Destroy() end`
+- Make helpers for repeated props from PRIMITIVES, e.g. makeTree(x,z), makeRock(x,z), using Parts
+  with .Shape (Enum.PartType.Ball/Cylinder/Block) or WedgePart, .Material, .Color=Color3.fromRGB,
+  .Anchored=true, and PointLight for glows. Group props in a Model.
+- Lay out the world with LOOPS/MATH for real structure: a bounded floor + perimeter walls; rows,
+  rings (math.sin/cos), grids, or clusters; a clear SpawnLocation; the objective placed purposefully.
+  Vary scale/rotation a little so nothing is copy-pasted.
+- Parent everything under a Folder "G4Game" in Workspace, grouped in subfolders.
+- Set lighting/atmosphere to fit the theme (game.Lighting: ClockTime, Ambient, FogColor/FogEnd, an Atmosphere).
 
-QA_SYSTEM = r"""You are a senior Roblox engineer reviewing a 3-part game script (BUILD / SERVER /
-CLIENT). Fix every bug WITHOUT changing the game's design: invalid Enums/API, nil indexing,
-loops missing task.wait, undefined vars, wrong service, things that error at runtime, and anything
-in the wrong part (gameplay in BUILD, build in SERVER). Also ensure BUILD has no player/gameplay
-logic. KEEP the exact `-- TITLE:` line and the `-- ===== BUILD/SERVER/CLIENT =====` markers and the
-three-part structure. Output ONLY the corrected three-part script."""
+SERVER (a Script in ServerScriptService that runs at game runtime). leaderstats; Touched /
+ClickDetector handlers; timers via task.spawn(function() while ... task.wait(t) end end); clear
+win/lose. Handle Players.PlayerAdded AND Players:GetPlayers(). It references the built world via
+workspace:WaitForChild("G4Game").
 
-API_REPAIR_SYSTEM = r"""You are fixing a Roblox script. Replace ONLY the invalid Roblox API usages
-listed below with correct, real members that fit the intent (e.g. a rock should use Slate or Basalt).
-Change NOTHING else. KEEP the `-- TITLE:` line and the `-- ===== BUILD/SERVER/CLIENT =====` markers.
-Output ONLY the full corrected script."""
+CLIENT (a LocalScript in StarterPlayerScripts that runs on each client at runtime). UI/HUD, local
+effects, camera, input. Use local player = game.Players.LocalPlayer and player:WaitForChild("PlayerGui").
 
-REVISE_SYSTEM = r"""You are improving the WORLD of a Roblox game you built. A playtester looked at a
-screenshot of the level in Studio and gave feedback. Rewrite ONLY the BUILD code to improve the
-world (layout, density, spread, a clearly bounded arena, decoration, structure) — keep the same
-theme and objective. Output ONLY the corrected BUILD Luau (no markers, just the build code)."""
+ROBUSTNESS (avoid runtime errors): only use REAL Roblox Enums/API; never index a possibly-nil value
+(use FindFirstChild and the character's HumanoidRootPart, not PrimaryPart); never loop without a wait.
+Make it a real, lively, atmospheric game with a clear objective. Output ONLY the three parts."""
+
+QA_SYSTEM = r"""You are a senior Roblox engineer doing strict code review on a 3-part Roblox game
+(BUILD / SERVER / CLIENT). Find and FIX every bug WITHOUT changing the game's design or content:
+- invalid Enum members (Font/Material/PartType/etc. that don't exist) -> use real ones
+- indexing a possibly-nil value (e.g. character.PrimaryPart, FindFirstChild results) -> guard it
+- loops with no task.wait (would freeze) -> add a wait
+- undefined variables, wrong API names/signatures, bad parenting or ordering
+- anything that would error at runtime
+Keep ALL world-building and gameplay exactly. KEEP the `-- TITLE:` line and the
+`-- ===== BUILD/SERVER/CLIENT =====` markers. Output ONLY the corrected three-part script."""
+
+API_REPAIR_SYSTEM = r"""You are fixing a Luau script. Replace ONLY the invalid Roblox API usages listed
+below with correct, real members that fit the intent (e.g. a rock should use Slate or Basalt). Change
+NOTHING else about the script. KEEP the `-- TITLE:` line and the `-- ===== BUILD/SERVER/CLIENT =====`
+markers. Output ONLY the full corrected script."""
+
+REVISE_SYSTEM = r"""You are improving a Roblox game you wrote. A playtester looked at a screenshot of
+your level in Studio and gave feedback. Improve the WORLD-BUILDING (layout, density, spread, a clearly
+bounded arena, decoration, structure) to address it — keep the same theme and objective. You are given
+the BUILD code; output ONLY the corrected BUILD Luau."""
 
 _SECTION_RE = re.compile(r"--\s*=+\s*(BUILD|SERVER|CLIENT)\s*=+", re.I)
 
