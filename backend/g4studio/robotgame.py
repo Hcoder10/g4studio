@@ -161,6 +161,29 @@ async def code_game(client: CerebrasClient, design: dict) -> str:
     return _strip_fences(t.text or "")
 
 
+async def _repair_source(client: CerebrasClient, source: str) -> tuple[str, bool]:
+    """Repair until the module both COMPILES (luau-compile) and RUNS cleanly (headless validator:
+    setup + 200 steps against a mock kit). Returns (source, valid)."""
+    from .game_validator import validate_game
+    from .syntax import check
+    for _ in range(3):
+        err = check(source)
+        if not err:
+            ok, rerr = validate_game(source)
+            if ok:
+                return source, True
+            err = ("Runtime error when the game actually runs: " + rerr +
+                   "  (nil-check every field; never do arithmetic on a possibly-nil value)")
+        t = await client.chat(
+            [{"role": "system", "content": CODER_SYSTEM},
+             {"role": "user", "content": f"This Game module has a problem:\n{err}\n\nFix it. Output "
+              f"ONLY the corrected module:\n{source}"}],
+            max_tokens=4000, temperature=0.3)
+        source = _strip_fences(t.text or "")
+    ok, _ = validate_game(source)
+    return source, (check(source) is None and ok)
+
+
 async def generate_in_family(client: CerebrasClient, family: str, on_event=None) -> dict:
     """Generate a game inside a structured task FAMILY: steered to the family's skill, varied across
     the family's axes, and deduped against everything generated in that family so far."""
@@ -183,17 +206,8 @@ async def generate_in_family(client: CerebrasClient, family: str, on_event=None)
     if on_event:
         on_event({"type": "game_design", **design})
     source = await code_game(client, design)
-    for _ in range(2):
-        err = check(source)
-        if not err:
-            break
-        t = await client.chat(
-            [{"role": "system", "content": CODER_SYSTEM},
-             {"role": "user", "content": f"This Game module has a Luau compile error:\n{err}\n\n"
-              f"Fix it. Output ONLY the corrected module:\n{source}"}],
-            max_tokens=4000, temperature=0.3)
-        source = _strip_fences(t.text or "")
-    return {"design": design, "source": source, "compiles": check(source) is None}
+    source, valid = await _repair_source(client, source)
+    return {"design": design, "source": source, "compiles": valid}
 
 
 EXTEND_SYSTEM = (
@@ -214,17 +228,8 @@ async def extend_robot_game(client: CerebrasClient, prev: dict, stats: dict, on_
     if on_event:
         on_event({"type": "game_design", **design})
     source = await code_game(client, design)
-    for _ in range(2):
-        err = check(source)
-        if not err:
-            break
-        t = await client.chat(
-            [{"role": "system", "content": CODER_SYSTEM},
-             {"role": "user", "content": f"This Game module has a Luau compile error:\n{err}\n\n"
-              f"Fix it. Output ONLY the corrected module:\n{source}"}],
-            max_tokens=4000, temperature=0.3)
-        source = _strip_fences(t.text or "")
-    return {"design": design, "source": source, "compiles": check(source) is None}
+    source, valid = await _repair_source(client, source)
+    return {"design": design, "source": source, "compiles": valid}
 
 
 async def generate_robot_game(client: CerebrasClient, theme: str = "", on_event=None) -> dict:
@@ -235,14 +240,5 @@ async def generate_robot_game(client: CerebrasClient, theme: str = "", on_event=
     if on_event:
         on_event({"type": "game_design", **design})
     source = await code_game(client, design)
-    for _ in range(2):  # repair until it compiles
-        err = check(source)
-        if not err:
-            break
-        t = await client.chat(
-            [{"role": "system", "content": CODER_SYSTEM},
-             {"role": "user", "content": f"This Game module has a Luau compile error:\n{err}\n\n"
-              f"Fix it. Output ONLY the corrected module:\n{source}"}],
-            max_tokens=4000, temperature=0.3)
-        source = _strip_fences(t.text or "")
-    return {"design": design, "source": source, "compiles": check(source) is None}
+    source, valid = await _repair_source(client, source)
+    return {"design": design, "source": source, "compiles": valid}

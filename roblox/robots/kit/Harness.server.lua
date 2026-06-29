@@ -239,9 +239,13 @@ end
 -- boot
 task.spawn(startRound)
 
+local smoothT = nil  -- low-passed IK goal: filters mouse noise so the arm doesn't jitter
 RunService.Heartbeat:Connect(function(dt)
 	autoTagGraspables()
-	if latest.target then arm:solveTo(latest.target) end
+	if latest.target then
+		smoothT = smoothT and smoothT:Lerp(latest.target, 0.4) or latest.target
+		arm:solveTo(smoothT)
+	end
 	arm:setTarget(5, latest.wristRoll)
 	arm:grip(latest.grip and 0 or 1)
 	arm:step(dt)            -- the arm is always controllable (you can pre-aim during the countdown)
