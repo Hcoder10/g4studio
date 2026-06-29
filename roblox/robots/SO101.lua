@@ -44,13 +44,13 @@ local TIP_OFFSET = CFrame.new(-0.2607, -0.0072, -3.2380) * CFrame.Angles(0, math
 -- exact post-recenter offset per baked link mesh (= bbox center of the baked geometry, in studs).
 -- skin.CFrame = linkCF * MESH_OFFSET so geometry point q renders at linkCF*q. Computed, not guessed.
 SO101.MESH_OFFSET = {
-	base = CFrame.new(0.6176, 0.0000, 1.1029),
-	shoulder = CFrame.new(-0.6345, 0.0377, 0.1312),
-	upper = CFrame.new(-2.0230, -0.0090, 0.6653),
-	fore = CFrame.new(-1.7613, 0.1072, 0.6661),
-	wrist = CFrame.new(-0.0724, -0.8996, 0.7310),
-	gripperhub = CFrame.new(-0.0858, -0.0660, -1.7426),
-	jaw = CFrame.new(-0.0363, -1.2121, 0.6224),
+	base = CFrame.new(0.5553, 0.0000, 1.1089),
+	shoulder = CFrame.new(-0.6336, 0.0383, -0.3003),
+	upper = CFrame.new(-1.9498, -0.4323, 0.6649),
+	fore = CFrame.new(-2.1960, 0.1139, 0.6665),
+	wrist = CFrame.new(-0.0716, -0.8882, 0.7309),
+	gripperhub = CFrame.new(-0.0792, -0.0660, -1.7067),
+	jaw = CFrame.new(-0.0380, -1.1881, 0.6237),
 }
 
 -- URDF rpy -> CFrame:  R = Rz(yaw) * Ry(pitch) * Rx(roll)
