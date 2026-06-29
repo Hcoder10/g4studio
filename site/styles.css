@@ -52,13 +52,13 @@ body {
   font-family:var(--font-sans);
   color:var(--ink-900);
   background:
-    radial-gradient(120% 60% at 80% 0%, rgba(125,211,252,.45), transparent 55%),
+    radial-gradient(110% 34% at 82% 0%, rgba(125,211,252,.5), transparent 58%),
     linear-gradient(180deg,
-      #eaf7ff 0%, #e3f4ff 7%, #ddf0fd 14%,
-      #eaf2f3 24%, #f6ecd8 34%, #f3dca9 44%,
-      #e6b257 53%, #c9851f 60%, #9a5512 67%,
-      #6e2c14 74%, #511719 82%, #3a0f12 90%, #270a0c 100%);
-  background-attachment:fixed;
+      #eaf7ff 0%, #e4f4ff 10%, #ddf2fe 22%,
+      #e7f3f1 30%, #eef0e2 38%, #f5e8cf 44%,
+      #edc676 48%, #d99a39 52%, #a85e1a 55%,
+      #6e2c14 57.5%, #3a0f12 59.7%, #340d11 72%,
+      #2c0b0d 86%, #210809 100%);
   -webkit-font-smoothing:antialiased;
   text-rendering:optimizeLegibility;
   overflow-x:hidden;
@@ -359,8 +359,9 @@ p { margin:0 0 1rem; }
 /* trace viewer */
 .trace { background:#0f1c14; flex:1; }
 .trace .tv {
-  font-family:var(--font-mono); font-size:.74rem; line-height:1.55; color:#bfe6c9;
+  font-family:var(--font-mono); font-size:.7rem; line-height:1.7; color:#bfe6c9;
   padding:14px 16px; height:100%; min-height:300px; max-height:430px; overflow:hidden; position:relative;
+  letter-spacing:-.01em;
 }
 .trace .tv .ln { white-space:pre; opacity:0; animation:lnin .3s var(--ease-out) forwards; }
 .trace .tv .k { color:#6fb6ff; } .trace .tv .s { color:#e2c98a; } .trace .tv .n { color:#a6e3a1; }
@@ -547,7 +548,7 @@ p { margin:0 0 1rem; }
   border-radius:inherit; white-space:nowrap;
 }
 .soon.mini::after { content:"Soon"; font-size:.54rem; }
-.soon.on-dark2::after { color:var(--cream-50); background:rgba(39,10,12,.5); }
+.on-dark .soon::after, .soon.on-dark2::after { color:var(--cream-50); background:rgba(39,10,12,.55); }
 .footer-col.soon-col { position:relative; }
 .footer-col.soon-col .lst { opacity:.5; filter:blur(2px); pointer-events:none; }
 .footer-col.soon-col .soon-tag { position:absolute; top:30px; left:0; font:700 .6rem/1 var(--font-sans); letter-spacing:.08em; text-transform:uppercase; color:var(--gold-300); background:rgba(39,10,12,.6); padding:4px 8px; border-radius:6px; }

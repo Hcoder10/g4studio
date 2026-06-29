@@ -76,6 +76,76 @@ def solve_to(base, targets, world_target, rest=REST, posture=0.12, lam2=0.6, ite
     return [np.degrees(q[i]) for i in range(4)]
 
 
+# ---------------------------------------------------------------------------
+# GENERAL chain kinematics (any URDF arm) — used by onboard_robot.py
+# ---------------------------------------------------------------------------
+def _aa_axis(axis, th):
+    ax = np.array(axis, float); ax = ax / (np.linalg.norm(ax) + 1e-12)
+    x, y, z = ax; c, s = np.cos(th), np.sin(th); C = 1 - c
+    return _H(R=np.array([
+        [c + x * x * C, x * y * C - z * s, x * z * C + y * s],
+        [y * x * C + z * s, c + y * y * C, y * z * C - x * s],
+        [z * x * C - y * s, z * y * C + x * s, c + z * z * C]]))
+
+
+def fk_chain(chain, base, angles):
+    """chain = [{pos(studs), rpy, axis, lo, hi}, ...]; tip = last link frame origin."""
+    cf = base @ UPFIX
+    F = []
+    for i, j in enumerate(chain):
+        cf = cf @ _H(R=_rpy(*j["rpy"]), t=j["pos"]) @ _aa_axis(j["axis"], np.radians(angles[i]))
+        F.append(cf)
+    return F, F[-1][:3, 3]
+
+
+def solve_chain(chain, base, targets, world_target, rest, posture=0.1, lam2=0.6, iters=10):
+    """Damped-least-squares IK over an arbitrary revolute chain, with null-space posture toward
+    `rest` and joint-limit clamping. Returns updated joint targets (deg)."""
+    n = len(chain)
+    q = [np.radians(targets[i]) for i in range(n)]
+    lim = [(np.radians(c["lo"]), np.radians(c["hi"])) for c in chain]
+    for _ in range(iters):
+        F, tip = fk_chain(chain, base, [np.degrees(v) for v in q])
+        e = world_target - tip
+        if np.linalg.norm(e) < 0.08: break
+        if np.linalg.norm(e) > 2: e *= 2 / np.linalg.norm(e)
+        Jc = [np.cross(F[c][:3, :3] @ np.array(chain[c]["axis"], float), tip - F[c][:3, 3]) for c in range(n)]
+
+        def step(cols):
+            M = lam2 * np.eye(3)
+            for c in cols: M += np.outer(Jc[c], Jc[c])
+            Mi = np.linalg.inv(M); y = Mi @ e; dq = [0.0] * n
+            for c in cols: dq[c] = float(np.dot(Jc[c], y))
+            z = [np.radians(rest[c]) - q[c] for c in range(n)]; zc = sum(Jc[c] * z[c] for c in cols)
+            for c in cols: dq[c] += posture * (z[c] - np.dot(Mi @ Jc[c], zc))
+            return dq
+        dq = step(list(range(n)))
+        bad = [c for c in range(n) if not (lim[c][0] <= q[c] + dq[c] <= lim[c][1])]
+        if bad:
+            cols = [c for c in range(n) if c not in bad]
+            dq = step(cols) if cols else [0.0] * n
+        for c in range(n): q[c] = float(np.clip(q[c] + dq[c], lim[c][0], lim[c][1]))
+    return [np.degrees(q[i]) for i in range(n)]
+
+
+def reach_fraction_chain(chain, base, rest, n=300, seed=0):
+    """Fraction of a forward workspace box this rest pose can reach — the score for rest-pose search."""
+    rng = np.random.default_rng(seed)
+    F0, tip0 = fk_chain(chain, base, rest)
+    sh = F0[min(1, len(chain) - 1)][:3, 3]
+    span = max(2.0, np.linalg.norm(tip0 - sh))   # rough arm scale
+    ok = tot = 0
+    for _ in range(n):
+        T = sh + np.array([rng.uniform(-span, span), rng.uniform(-span, 0.2 * span),
+                           rng.uniform(0.3 * span, 1.2 * span)])
+        tot += 1
+        t = list(rest)
+        for _ in range(18): t = solve_chain(chain, base, t, T, rest)
+        _, tip = fk_chain(chain, base, t)
+        ok += np.linalg.norm(T - tip) < 0.08 * span + 0.3
+    return ok / tot
+
+
 def reach_fraction(base, rest, n=600, seed=0):
     """How much of the forward table workspace this rest pose can reach (for auto rest-pose search)."""
     rng = np.random.default_rng(seed); F0, _ = fk(base, rest + [0, GRIP_OPEN]); sh = F0[1][:3, 3]

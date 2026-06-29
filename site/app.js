@@ -194,11 +194,11 @@
       const phase = PHASES[pi % PHASES.length];
       ji = ji.map((v, k) => clamp(v + rand(-8, 8), -110, 110) * (k < 3 ? 1 : 0.5));
       grip = (phase === "grasp" || phase === "transport" || phase === "sort") ? clamp(grip - 0.25, 0, 1) : clamp(grip + 0.3, 0, 1);
-      const reward = phase === "place" ? "1.00" : (-rand(0.02, 0.3)).toFixed(2);
-      const j = ji.map((v) => v.toFixed(1)).join(", ");
+      const reward = phase === "place" ? "1.0" : (-rand(0.02, 0.3)).toFixed(2);
+      const j = ji.map((v) => v.toFixed(0)).join(",");
       const line = document.createElement("div");
       line.className = "ln";
-      line.innerHTML = `{<span class="k">"t"</span>:<span class="n">${t}</span>, <span class="k">"joints"</span>:[<span class="n">${j}</span>], <span class="k">"grip"</span>:<span class="n">${grip.toFixed(2)}</span>, <span class="k">"r"</span>:<span class="n">${reward}</span>, <span class="k">"sg"</span>:<span class="g">"</span><span class="sg ${phase}">${phase}</span><span class="g">"</span>}`;
+      line.innerHTML = `{<span class="k">"t"</span>:<span class="n">${t}</span>,<span class="k">"j"</span>:[<span class="n">${j}</span>],<span class="k">"grip"</span>:<span class="n">${grip.toFixed(1)}</span>,<span class="k">"r"</span>:<span class="n">${reward}</span>,<span class="k">"sg"</span>:<span class="g">"</span><span class="sg ${phase}">${phase}</span><span class="g">"</span>}`;
       traceView.appendChild(line);
       while (traceView.children.length > 11) traceView.removeChild(traceView.firstChild);
       t += Math.round(rand(2, 5)); pi++;
@@ -398,13 +398,20 @@
 
     function draw() {
       ctx.clearRect(0, 0, W, H);
+      // the foundry: darken the data band so molten-gold cells read on maroon
+      const band = ctx.createLinearGradient(0, mergeY - H * 0.08, 0, H);
+      band.addColorStop(0, "rgba(39,10,12,0)");
+      band.addColorStop(0.45, "rgba(39,10,12,0.5)");
+      band.addColorStop(1, "rgba(31,8,10,0.82)");
+      ctx.fillStyle = band;
+      ctx.fillRect(0, mergeY - H * 0.08, W, H - (mergeY - H * 0.08));
       // data grid
       for (let r = 0; r < rows; r++) {
         for (let c = 0; c < cols; c++) {
           const v = grid[r * cols + c];
           const x = gridLeft + c * (cell + gap), y = gridTop + r * (cell + gap);
           if (v <= 0.001) {
-            ctx.fillStyle = "rgba(255,221,170,0.05)";
+            ctx.fillStyle = "rgba(255,224,176,0.08)";
           } else {
             const a = 0.18 + v * 0.82;
             ctx.fillStyle = `rgba(${226 + v * 20},${174 + v * 30},${64 + v * 40},${a})`;
