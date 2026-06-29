@@ -16,20 +16,12 @@ local AssetService = game:GetService("AssetService")
 local CollectionService = game:GetService("CollectionService")
 
 -- Real geometry (imported MeshIds). USE_MESHES=false -> primitive blocks.
-SO101.USE_MESHES = false  -- meshes need the one-time visual alignment; skeleton works now
-SO101.MESH_SCALE = 0.033  -- studs per mm
-SO101.MESHES = {
-	base = "rbxassetid://83418669346877",       -- Base_SO101
-	shoulder = "rbxassetid://130300121536438",  -- Rotation_Pitch
-	upper = "rbxassetid://135195240065862",      -- Upper_arm
-	fore = "rbxassetid://72714526696272",        -- Under_arm
-	wrist = "rbxassetid://78151202619686",       -- Wrist_Roll_Pitch
-	jaw = "rbxassetid://127752971220158",        -- Moving_Jaw
-}
-local MESH_MM = {
-	base = Vector3.new(111, 72, 87), shoulder = Vector3.new(60, 84, 46),
-	upper = Vector3.new(142, 25, 67), fore = Vector3.new(131, 24, 64),
-	wrist = Vector3.new(62, 36, 78), jaw = Vector3.new(22, 92, 48),
+-- Flip to true once the 7 BAKED link meshes are imported. Each link's URDF visuals are merged +
+-- scaled to studs into ONE mesh, so Roblox's re-centering is harmless — the exact post-center
+-- offset is baked in SO101.MESH_OFFSET below. No manual alignment.
+SO101.USE_MESHES = false
+SO101.MESHES = {  -- import roblox/robots/meshes/link_obj/<key>.obj and paste the MeshId here
+	base = "", shoulder = "", upper = "", fore = "", wrist = "", gripperhub = "", jaw = "",
 }
 
 -- exact chain from the URDF (studs). Each entry: joint origin (pos + rpy) relative to the parent
@@ -39,7 +31,7 @@ SO101.CHAIN = {
 	{ name = "shoulder_lift", pos = Vector3.new(-1.0032, -0.6032, -1.7886), rpy = { -1.570800, -1.570800, 0.000000 }, axis = Vector3.new(0, 0, 1), lo = -100.0, hi = 100.0, mesh = "upper" },
 	{ name = "elbow_flex", pos = Vector3.new(-3.7148, -0.9240, 0.0000), rpy = { -0.000000, 0.000000, 1.570800 }, axis = Vector3.new(0, 0, 1), lo = -96.8, hi = 96.8, mesh = "fore" },
 	{ name = "wrist_flex", pos = Vector3.new(-4.4517, 0.1716, 0.0000), rpy = { 0.000000, 0.000000, -1.570800 }, axis = Vector3.new(0, 0, 1), lo = -95.0, hi = 95.0, mesh = "wrist" },
-	{ name = "wrist_roll", pos = Vector3.new(0.0000, -2.0163, 0.5973), rpy = { 1.570800, 0.048680, 3.141590 }, axis = Vector3.new(0, 0, 1), lo = -157.2, hi = 162.8, mesh = nil },
+	{ name = "wrist_roll", pos = Vector3.new(0.0000, -2.0163, 0.5973), rpy = { 1.570800, 0.048680, 3.141590 }, axis = Vector3.new(0, 0, 1), lo = -157.2, hi = 162.8, mesh = "gripperhub" },
 	{ name = "gripper", pos = Vector3.new(0.6666, 0.6204, -0.7722), rpy = { 1.570800, -0.000000, -0.000000 }, axis = Vector3.new(0, 0, 1), lo = -10.0, hi = 100.0, mesh = "jaw" },
 }
 SO101.N = #SO101.CHAIN
@@ -49,10 +41,16 @@ SO101.GRIP_CLOSED, SO101.GRIP_OPEN = 0.0, 55.0  -- joint-6 deg for grip(0) .. gr
 local UPFIX = CFrame.Angles(-math.pi / 2, 0, 0)  -- URDF Z-up -> Roblox Y-up
 local TIP_OFFSET = CFrame.new(-0.2607, -0.0072, -3.2380) * CFrame.Angles(0, math.pi, 0)  -- gripper_frame
 
--- per-link visual nudge for the re-centered imported meshes (tuned against a screenshot)
+-- exact post-recenter offset per baked link mesh (= bbox center of the baked geometry, in studs).
+-- skin.CFrame = linkCF * MESH_OFFSET so geometry point q renders at linkCF*q. Computed, not guessed.
 SO101.MESH_OFFSET = {
-	base = CFrame.new(), shoulder = CFrame.new(), upper = CFrame.new(),
-	fore = CFrame.new(), wrist = CFrame.new(), jaw = CFrame.new(),
+	base = CFrame.new(0.6176, 0.0000, 1.1029),
+	shoulder = CFrame.new(-0.6345, 0.0377, 0.1312),
+	upper = CFrame.new(-2.0230, -0.0090, 0.6653),
+	fore = CFrame.new(-1.7613, 0.1072, 0.6661),
+	wrist = CFrame.new(-0.0724, -0.8996, 0.7310),
+	gripperhub = CFrame.new(-0.0858, -0.0660, -1.7426),
+	jaw = CFrame.new(-0.0363, -1.2121, 0.6224),
 }
 
 -- URDF rpy -> CFrame:  R = Rz(yaw) * Ry(pitch) * Rx(roll)
@@ -70,15 +68,15 @@ local function part(name, size, color, parent)
 end
 
 local function meshSkin(key, parent)
-	if not SO101.USE_MESHES or not SO101.MESHES[key] then return nil end
+	local id = SO101.MESHES[key]
+	if not SO101.USE_MESHES or not id or id == "" then return nil end
 	local ok, mp = pcall(function()
-		return AssetService:CreateMeshPartAsync(SO101.MESHES[key],
+		return AssetService:CreateMeshPartAsync(id,
 			{ CollisionFidelity = Enum.CollisionFidelity.Box, RenderFidelity = Enum.RenderFidelity.Precise })
 	end)
 	if not ok or not mp then warn("[SO101] mesh load failed for '" .. key .. "': " .. tostring(mp)); return nil end
-	mp.Size = MESH_MM[key] * SO101.MESH_SCALE
-	mp.Anchored = true; mp.CanCollide = false
-	mp.Material = Enum.Material.SmoothPlastic; mp.Color = Color3.fromRGB(48, 51, 58)
+	mp.Anchored = true; mp.CanCollide = false  -- imported pre-scaled to studs; keep native size
+	mp.Material = Enum.Material.SmoothPlastic; mp.Color = Color3.fromRGB(226, 174, 64)  -- SO-101 yellow
 	mp.Parent = parent
 	return mp
 end
